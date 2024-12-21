@@ -10,3 +10,5 @@ Image processing is a very interesting field, somewhat complex, but not boring b
 ```sh
 python example.py ./image.jpg
 ```
+
+**This repository is currently a work in progress. Updates and new features will be added regularly as development continues. Stay tuned for future improvements!.**
