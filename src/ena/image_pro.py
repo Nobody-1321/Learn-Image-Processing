@@ -270,38 +270,22 @@ def show_two_images_side_by_side(img1, img2, title="Comparison", orientation="ho
 
     # Display the combined image
     cv.imshow(title, combined)
-    cv.waitKey(0)
-    cv.destroyAllWindows()
 
 class UnionFind:
-    """
-    A class to represent the Union-Find data structure (also known as Disjoint Set Union, DSU).
-    Attributes:
-    -----------
-    parent : numpy.ndarray
-        An array where the index represents an element and the value at that index represents the parent of that element.
-    Methods:
-    --------
-    __init__(size):
-        Initializes the Union-Find data structure with a given size.
-    find(x):
-        Finds the root of the element x with path compression.
-    union(x, y):
-        Unites the sets that contain elements x and y.
-    """
+    """Estructura de datos Union-Find con compresión de caminos."""
     def __init__(self, size):
         self.parent = np.arange(size)
     
     def find(self, x):
         if self.parent[x] != x:
-            self.parent[x] = self.find(self.parent[x])  # Compresión de ruta
+            self.parent[x] = self.find(self.parent[x])  # Compresión de caminos
         return self.parent[x]
-
+    
     def union(self, x, y):
         root_x = self.find(x)
         root_y = self.find(y)
         if root_x != root_y:
-            self.parent[root_y] = root_x  # Unir conjuntos
+            self.parent[root_y] = root_x
 
 def connected_components_by_union_find(image):
     """
@@ -338,40 +322,37 @@ def connected_components_by_union_find(image):
                 next_label += 1
 
     # Segunda pasada: Reetiquetar con los representantes equivalentes
-    for y in range(height):
-        for x in range(width):
-            if label_image[y, x] > 0:
-                label_image[y, x] = uf.find(label_image[y, x])
+    labels_flat = label_image.flatten()
+    labels_flat = np.vectorize(uf.find)(labels_flat)  # Vectorizado en NumPy
+    label_image = labels_flat.reshape(height, width)
 
     return label_image
 
+
 def connected_components_by_union_find_8_connected(image):
     """
-    Perform connected components labeling on a binary image using the Union-Find algorithm with 8-connected neighbors.
-    Parameters:
-    image (numpy.ndarray): A 2D binary image where foreground pixels are non-zero and background pixels are zero.
-    Returns:
-    numpy.ndarray: A 2D array of the same shape as the input image, where each connected component is assigned a unique label.
+    Algoritmo de etiquetado de componentes conexas con Union-Find (8 vecinos), optimizado con NumPy.
     """
     height, width = image.shape
     label_image = np.zeros((height, width), dtype=int)
-    uf = UnionFind(height * width)  # Estructura para uniones
+    uf = UnionFind(height * width)  # Estructura para unir etiquetas
     next_label = 1
-
-    # Primera pasada: Asignación preliminar y registro de equivalencias
+    
+    # 🔹 Primera pasada: Asignar etiquetas iniciales y registrar equivalencias
     for y in range(height):
         for x in range(width):
-            if image[y, x] == 0:  # Fondo (asumimos 0 como fondo)
+            if image[y, x] == 0:  # Fondo
                 continue
-            
+
+            # 🔸 Buscar etiquetas de vecinos (usando NumPy para eficiencia)
             neighbors = []
-            if x > 0 and image[y, x] == image[y, x - 1]:  # Vecino izquierdo
+            if x > 0 and image[y, x] == image[y, x - 1]:  # Izquierda
                 neighbors.append(label_image[y, x - 1])
-            if y > 0 and image[y, x] == image[y - 1, x]:  # Vecino superior
+            if y > 0 and image[y, x] == image[y - 1, x]:  # Arriba
                 neighbors.append(label_image[y - 1, x])
-            if x > 0 and y > 0 and image[y, x] == image[y - 1, x - 1]:  # Vecino superior izquierdo
+            if x > 0 and y > 0 and image[y, x] == image[y - 1, x - 1]:  # Arriba-Izquierda
                 neighbors.append(label_image[y - 1, x - 1])
-            if x < width - 1 and y > 0 and image[y, x] == image[y - 1, x + 1]:  # Vecino superior derecho
+            if x < width - 1 and y > 0 and image[y, x] == image[y - 1, x + 1]:  # Arriba-Derecha
                 neighbors.append(label_image[y - 1, x + 1])
             
             if neighbors:
@@ -383,10 +364,9 @@ def connected_components_by_union_find_8_connected(image):
                 label_image[y, x] = next_label
                 next_label += 1
 
-    # Segunda pasada: Reetiquetar con los representantes equivalentes
-    for y in range(height):
-        for x in range(width):
-            if label_image[y, x] > 0:
-                label_image[y, x] = uf.find(label_image[y, x])
+    # 🔹 Segunda pasada: Asignar etiquetas finales con compresión de caminos
+    labels_flat = label_image.flatten()
+    labels_flat = np.vectorize(uf.find)(labels_flat)  # Vectorizado en NumPy
+    label_image = labels_flat.reshape(height, width)
 
     return label_image
