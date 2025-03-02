@@ -328,7 +328,6 @@ def connected_components_by_union_find(image):
 
     return label_image
 
-
 def connected_components_by_union_find_8_connected(image):
     """
     Algoritmo de etiquetado de componentes conexas con Union-Find (8 vecinos), optimizado con NumPy.
@@ -370,3 +369,282 @@ def connected_components_by_union_find_8_connected(image):
     label_image = labels_flat.reshape(height, width)
 
     return label_image
+
+def ConvolveSeparable(I, gh, gv):
+    """
+    Aplica la convolución separable a la imagen I usando los kernels 1D gh (horizontal) y gv (vertical).
+
+    Parámetros:
+    - I: Imagen de entrada (numpy array 2D).
+    - gh: Kernel 1D para la convolución horizontal.
+    - gv: Kernel 1D para la convolución vertical.
+
+    Retorna:
+    - Ir: Imagen después de la convolución con los dos kernels.
+    """
+    height, width = I.shape
+    w = len(gh)
+    pad_size = w // 2
+
+    # Paso 1: Padding de la imagen
+    I_padded = np.pad(I, ((pad_size, pad_size), (pad_size, pad_size)), mode='reflect')
+
+    # Paso 2: Convolución horizontal
+    Itmp = np.zeros_like(I_padded, dtype=np.float32)
+    for y in range(height):
+        for x in range(width):
+            val = 0
+            for i in range(w):
+                val += gh[i] * I_padded[y + pad_size, x + i]
+            Itmp[y + pad_size, x + pad_size] = val
+    
+    # Paso 3: Convolución vertical
+    Ir = np.zeros_like(I_padded, dtype=np.float32)
+    for y in range(height):
+        for x in range(width):
+            val = 0
+            for i in range(w):
+                val += gv[i] * Itmp[y + i, x + pad_size]
+            Ir[y + pad_size, x + pad_size] = val
+    
+            
+    # Eliminar el padding
+    #Ir = Ir[pad_size:-pad_size, pad_size:-pad_size]
+    Itmp = Itmp[pad_size:-pad_size, pad_size:-pad_size]
+    return Itmp
+    return Ir
+
+def GetKernelHalfWidth(sigma):
+    """
+    Computes the half-width of the Gaussian kernel based on the given standard deviation.
+
+    Parameters:
+    - sigma (float): The standard deviation of the Gaussian function.
+
+    Returns:
+    - half_width (int): The computed half-width of the kernel.
+    """
+    return int(2.5 * sigma + 0.5)  # Ensures enough coverage of the Gaussian function
+
+def CreateGaussianKernel(sigma):
+    """
+    Generates a 1D Gaussian kernel based on a given standard deviation (sigma).
+
+    Parameters:
+    - sigma (float): The standard deviation of the Gaussian function.
+
+    Returns:
+    - gauss (numpy.ndarray): The normalized 1D Gaussian kernel.
+    """
+    # Step 1: Determine the half-width of the kernel
+    half_width = GetKernelHalfWidth(sigma)
+
+    # Step 2: Compute the full width (must be an odd number)
+    w = 2 * half_width + 1
+
+    # Step 3: Initialize the kernel and normalization factor
+    gauss = np.zeros(w, dtype=np.float32)
+    norm = 0.0
+
+    # Step 4: Compute Gaussian values and accumulate normalization factor
+    for i in range(w):
+        x = i - half_width  # Shift the index to center around 0
+        gauss[i] = np.exp(- (x**2) / (2 * sigma**2))
+        norm += gauss[i]
+
+    # Step 5: Normalize the kernel so that its sum equals 1
+    gauss /= norm
+
+    return gauss
+
+def ConvolveBox(f, w):
+    """
+    Convolve a 1D signal f with a 1D box kernel of length w.
+
+    Parameters:
+    - f: 1D signal (numpy array) with length n.
+    - w: Length of the 1D box kernel (odd number).
+
+    Returns:
+    - result: The convolution of the signal f with the box kernel.
+    """
+    n = len(f)
+    half_w = w // 2  # Half width of the kernel
+    
+    # Initialize the result array
+    result = np.zeros_like(f, dtype=np.float32)
+    
+    # Convolution process
+    for i in range(n):
+        # Sum the values in the window centered at i (with kernel size w)
+        val = 0
+        for j in range(-half_w, half_w + 1):
+            if 0 <= i + j < n:
+                val += f[i + j]
+        
+        # Store the result (normalized average of the window)
+        result[i] = val / w  # Normalize by dividing by the kernel size (w)
+    
+    return result
+
+def ConvolveBox1(f, w):
+    """
+    Apply a 1D box kernel to the image f (convolution with a box filter).
+    
+    Parameters:
+    - f: The input image (numpy array).
+    - w: The width of the box filter (odd integer).
+    
+    Returns:
+    - The convolved image.
+    """
+    # Ensure the kernel is normalized
+    kernel = np.ones(w) / w  # Box filter (normalized)
+    
+    # Pad the image to handle edges
+    pad_size = w // 2
+    f_padded = np.pad(f, ((pad_size, pad_size), (pad_size, pad_size)), mode='edge')
+
+    # Output image
+    result = np.zeros_like(f, dtype=np.float32)
+
+    # Apply the convolution horizontally
+    for y in range(f.shape[0]):
+        for x in range(f.shape[1]):
+            result[y, x] = np.sum(f_padded[y:y+w, x] * kernel)
+    
+    return result
+
+def CreateGaussianDerivativeKernel(sigma):
+    """
+    Generates a 1D Gaussian derivative kernel for edge detection.
+
+    Parameters:
+    - sigma (float): Standard deviation of the Gaussian function.
+
+    Returns:
+    - gauss_deriv (numpy.ndarray): The 1D Gaussian derivative kernel.
+    """
+    # Paso 1: Obtener la mitad del ancho del kernel
+    half_width = GetKernelHalfWidth(sigma)
+    
+    # Paso 2: Calcular el ancho total (siempre impar)
+    w = 2 * half_width + 1
+
+    # Paso 3: Inicializar el kernel y el factor de normalización
+    gauss_deriv = np.zeros(w, dtype=np.float32)
+    norm = 0.0
+
+    # Paso 4: Calcular la derivada de la función Gaussiana
+    for i in range(w):
+        x = i - half_width  # Centramos los valores alrededor de 0
+        gauss_deriv[i] = -x * np.exp(- (x ** 2) / (2 * sigma ** 2))  # Derivada de Gauss
+        norm += abs(x * gauss_deriv[i])  # Normalización basada en la suma de valores absolutos
+
+    # Paso 5: Normalizar el kernel
+    gauss_deriv /= norm
+
+    return gauss_deriv
+
+de
+def SobelOperator(image):
+    """
+    Aplica el operador de Sobel a una imagen en escala de grises.
+    
+    Parámetros:
+    - image: Imagen de entrada (numpy array 2D en escala de grises).
+
+    Retorna:
+    - Gx: Gradiente en la dirección X.
+    - Gy: Gradiente en la dirección Y.
+    - G: Magnitud del gradiente combinando Gx y Gy.
+    """
+
+    # Definir los kernels de Sobel
+    Sobel_x = np.array([[-1, 0, 1], 
+                         [-2, 0, 2], 
+                         [-1, 0, 1]], dtype=np.float32)
+
+    Sobel_y = np.array([[-1, -2, -1], 
+                         [0,  0,  0], 
+                         [1,  2,  1]], dtype=np.float32)
+
+    Sobel_x = Sobel_x * 1/8
+    Sobel_y = Sobel_y * 1/8
+
+    # Aplicar la convolución con los filtros de Sobel
+    Gx = cv.filter2D(image, cv.CV_32F, Sobel_x)
+    Gy = cv.filter2D(image, cv.CV_32F, Sobel_y)
+
+    # Calcular la magnitud del gradiente
+    G = np.sqrt(Gx**2 + Gy**2)
+
+    # Normalizar para visualización
+    Gx = cv.normalize(Gx, None, 0, 255, cv.NORM_MINMAX)
+    Gy = cv.normalize(Gy, None, 0, 255, cv.NORM_MINMAX)
+    G = cv.normalize(G, None, 0, 255, cv.NORM_MINMAX)
+
+    return Gx, Gy, G
+
+def ScharOperator(image):
+        # Definir los kernels de Sobel
+    Schar_x = np.array([[-3, 0, 3], 
+                         [-10, 0, 10], 
+                         [-3, 0, 3]], dtype=np.float32)
+
+    Schar_y = np.array([[ 3, 10,  3], 
+                         [0,  0,  0], 
+                         [-3,  -10,  -3]], dtype=np.float32)
+
+    Schar_x = Schar_x * 1/32
+    Schar_y = Schar_y * 1/32
+
+    # Aplicar la convolución con los filtros de Sobel
+
+    Gx = cv.filter2D(image, cv.CV_32F, Schar_x)
+    Gy = cv.filter2D(image, cv.CV_32F, Schar_y)
+
+    # Calcular la magnitud del gradiente
+    G = np.sqrt(Gx**2 + Gy**2)
+
+    # Normalizar para visualización
+    Gx = cv.normalize(Gx, None, 0, 255, cv.NORM_MINMAX)
+    Gy = cv.normalize(Gy, None, 0, 255, cv.NORM_MINMAX)
+    G = cv.normalize(G, None, 0, 255, cv.NORM_MINMAX)
+
+    return Gx, Gy, G
+
+def ComputeImageGradient(Img, sigma):
+    """
+    Compute the image gradient using the Gaussian derivative kernel.
+
+    Parameters:
+    - Img: The input image (numpy array).
+    - sigma: The standard deviation of the Gaussian kernel.
+
+    Returns:
+    - Gx: The gradient image in the X direction.
+    - Gy: The gradient image in the Y direction.
+    - G: The magnitude of the gradient.
+    """
+    # Step 1: Create the Gaussian derivative kernel
+    gauss_deriv = CreateGaussianDerivativeKernel(sigma)
+
+    # Step 2: Apply the convolution
+    Gx = ConvolveSeparable(Img, gauss_deriv, gauss_deriv)
+    Gy = ConvolveSeparable(Img, gauss_deriv, gauss_deriv)
+
+    # Step 3: Compute the magnitude and phase of the gradient
+
+    # Step 3: Compute the magnitude and phase of the gradient
+    Gmag = np.sqrt(Gx**2 + Gy**2)  # Gradient magnitude
+    Gphase = np.arctan2(Gy, Gx)    # Gradient phase (direction)
+
+    # Normalize for visualization
+    Gx = cv.normalize(Gx, None, 0, 255, cv.NORM_MINMAX)
+    Gy = cv.normalize(Gy, None, 0, 255, cv.NORM_MINMAX)
+    Gmag = cv.normalize(Gmag, None, 0, 255, cv.NORM_MINMAX)
+    Gphase = cv.normalize(Gphase, None, 0, 255, cv.NORM_MINMAX)
+    
+
+    return Gx, Gy, Gmag, Gphase

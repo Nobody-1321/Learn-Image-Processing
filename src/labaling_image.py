@@ -26,15 +26,16 @@ if __name__ == "__main__":
     #img = cv.imread("img_data/caballo.webp", cv.IMREAD_GRAYSCALE)
     #img = cv.imread("img_data/astro.jpg", cv.IMREAD_GRAYSCALE)
     img = cv.imread("img/mg.jpg", cv.IMREAD_GRAYSCALE)
+
     #img = cv.imread("img_data/arte.jpg", cv.IMREAD_GRAYSCALE)
     img = cv.resize(img, (800, 800), interpolation=cv.INTER_NEAREST)
-    
+
     img = cv.GaussianBlur(img, (5, 5), 0)
 
     # Binarizar la imagen
-    #_, img = cv.threshold(img, 90, 255, cv.THRESH_BINARY)
+    _, img = cv.threshold(img, 150, 255, cv.THRESH_BINARY)
     # Invertir la imagen
-    img = cv.bitwise_not(img)
+    #img = cv.bitwise_not(img)
 
     # Aplicar Connected Components con Union-Find
     labeled_img_4 = ena.connected_components_by_union_find(img)
@@ -63,8 +64,10 @@ if __name__ == "__main__":
     # Superponer el mapa de colores sobre la imagen original
     overlay_img_4 = overlay_color_map(img, color_img_4)
     overlay_img_8 = overlay_color_map(img, color_img_8)
+    
     #gaussian blur
     overlay_img_4 = cv.GaussianBlur(overlay_img_4, (5, 5), 0)
+    overlay_img_8 = cv.GaussianBlur(overlay_img_8, (5, 5), 0)
 
     kernel = np.ones((3,3), np.uint8)
     overlay_img_4 = cv.morphologyEx(overlay_img_4, cv.MORPH_CLOSE, kernel)  # Eliminación de ruido
