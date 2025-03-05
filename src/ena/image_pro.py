@@ -1,5 +1,7 @@
 import cv2 as cv
 import numpy as np
+from scipy.ndimage import gaussian_filter
+from scipy.special import factorial
 
 def channels_bgr(img):
     """
@@ -382,6 +384,7 @@ def ConvolveSeparable(I, gh, gv):
     Retorna:
     - Ir: Imagen después de la convolución con los dos kernels.
     """
+
     height, width = I.shape
     w = len(gh)
     pad_size = w // 2
@@ -411,8 +414,10 @@ def ConvolveSeparable(I, gh, gv):
     # Eliminar el padding
     #Ir = Ir[pad_size:-pad_size, pad_size:-pad_size]
     Itmp = Itmp[pad_size:-pad_size, pad_size:-pad_size]
+
+
+
     return Itmp
-    return Ir
 
 def GetKernelHalfWidth(sigma):
     """
@@ -546,7 +551,6 @@ def CreateGaussianDerivativeKernel(sigma):
 
     return gauss_deriv
 
-de
 def SobelOperator(image):
     """
     Aplica el operador de Sobel a una imagen en escala de grises.
@@ -614,12 +618,12 @@ def ScharOperator(image):
 
     return Gx, Gy, G
 
-def ComputeImageGradient(Img, sigma):
+def ComputeImageGradient(img, sigma):
     """
     Compute the image gradient using the Gaussian derivative kernel.
 
     Parameters:
-    - Img: The input image (numpy array).
+    - img: The input image (numpy array).
     - sigma: The standard deviation of the Gaussian kernel.
 
     Returns:
@@ -627,12 +631,16 @@ def ComputeImageGradient(Img, sigma):
     - Gy: The gradient image in the Y direction.
     - G: The magnitude of the gradient.
     """
+    # convertir a 32 bits y normalizar
+    
+    img = img.astype(np.float32)
+
     # Step 1: Create the Gaussian derivative kernel
     gauss_deriv = CreateGaussianDerivativeKernel(sigma)
 
     # Step 2: Apply the convolution
-    Gx = ConvolveSeparable(Img, gauss_deriv, gauss_deriv)
-    Gy = ConvolveSeparable(Img, gauss_deriv, gauss_deriv)
+    Gx = ConvolveSeparable(img, gauss_deriv, gauss_deriv)
+    Gy = ConvolveSeparable(img, gauss_deriv, gauss_deriv)
 
     # Step 3: Compute the magnitude and phase of the gradient
 
@@ -646,5 +654,310 @@ def ComputeImageGradient(Img, sigma):
     Gmag = cv.normalize(Gmag, None, 0, 255, cv.NORM_MINMAX)
     Gphase = cv.normalize(Gphase, None, 0, 255, cv.NORM_MINMAX)
     
+    return Gx.astype(np.uint8), Gy.astype(np.uint8), Gmag.astype(np.uint8), Gphase.astype(np.uint8)
 
-    return Gx, Gy, Gmag, Gphase
+def AddGaussianNoise(I, sigma):
+    """
+    Agrega ruido gaussiano independiente a una imagen en escala de grises.
+
+    Parámetros:
+    - I: Imagen de entrada en escala de grises (numpy array).
+    - sigma: Desviación estándar del ruido gaussiano.
+
+    Retorna:
+    - Ir: Imagen con ruido agregado.
+    """
+    # Generar ruido gaussiano con media 0 y desviación estándar sigma
+    noise = np.random.normal(0, sigma, I.shape).astype(np.float32)
+
+    # Sumar el ruido a la imagen original
+    Ir = I.astype(np.float32) + noise
+
+    # Clampeamos los valores para que estén en el rango [0, 255]
+    Ir = np.clip(Ir, 0, 255).astype(np.uint8)
+
+    return Ir
+
+def MedianFilter1(image, window_size):
+    """
+    Aplica un filtro de mediana a una imagen en escala de grises utilizando un histograma deslizante.
+
+    Parámetros:
+    - image: Imagen en escala de grises (numpy array).
+    - window_size: Tamaño de la ventana cuadrada para calcular la mediana (debe ser impar).
+
+    Retorna:
+    - Imagen filtrada con el filtro de mediana.
+    """
+
+    # Asegurar que el tamaño de la ventana sea impar
+    if window_size % 2 == 0:
+        raise ValueError("El tamaño de la ventana debe ser un número impar.")
+
+    half_w = window_size // 2  # Mitad de la ventana
+    height, width = image.shape
+    filtered_image = np.zeros_like(image, dtype=np.uint8)
+
+    # Inicializar histograma para la primera ventana
+    histogram = np.zeros(256, dtype=int)
+
+    # Construir histograma inicial para la primera columna
+    for y in range(window_size):
+        for x in range(window_size):
+            histogram[image[y, x]] += 1
+
+    # Función para encontrar la mediana en el histograma acumulado
+    def find_median(hist, total_pixels):
+        count = 0
+        for i in range(256):
+            count += hist[i]
+            if count >= total_pixels:
+                return i
+
+    median_pos = (window_size * window_size) // 2  # Posición del valor mediano
+
+    # Aplicar filtro de mediana con histograma deslizante
+    for y in range(height - window_size + 1):
+        if y > 0:
+            # Actualizar histograma eliminando la fila superior anterior y agregando la nueva fila inferior
+            for x in range(window_size):
+                histogram[image[y - 1, x]] -= 1  # Remover la fila superior
+                histogram[image[y + window_size - 1, x]] += 1  # Agregar la fila inferior
+
+        # Clonar histograma para manipularlo en la dirección X
+        current_hist = histogram.copy()
+        filtered_image[y + half_w, half_w] = find_median(current_hist, median_pos)
+
+        for x in range(1, width - window_size + 1):
+            # Deslizar ventana en la dirección X
+            for i in range(window_size):
+                current_hist[image[y + i, x - 1]] -= 1  # Quitar pixel de la izquierda
+                current_hist[image[y + i, x + window_size - 1]] += 1  # Agregar pixel de la derecha
+
+            # Calcular la mediana en la nueva ventana
+            filtered_image[y + half_w, x + half_w] = find_median(current_hist, median_pos)
+
+    return filtered_image
+
+def MedianFilter(img, w):
+    """
+    Aplica un filtro de mediana a una imagen en escala de grises.
+
+    Parámetros:
+    - img: Imagen de entrada (numpy array en escala de grises).
+    - w: Tamaño de la ventana cuadrada (debe ser impar).
+
+    Retorna:
+    - Ir: Imagen filtrada con el filtro de mediana.
+    """
+    height, width = img.shape
+    half_w = w // 2  # Determina la mitad del ancho del filtro
+    Ir = np.zeros_like(img)  # Imagen de salida
+
+    # Recorremos cada píxel de la imagen
+    for y in range(height):
+        for x in range(width):
+            # Definir los límites de la ventana de filtrado
+            y1, y2 = max(0, y - half_w), min(height, y + half_w + 1)
+            x1, x2 = max(0, x - half_w), min(width, x + half_w + 1)
+
+            # Extraer la ventana y calcular la mediana
+            window = img[y1:y2, x1:x2].flatten()
+            med = np.median(window)
+
+            # Asignar el valor mediano al píxel correspondiente
+            Ir[y, x] = med
+
+    return Ir
+
+def NonLocalMeans(I, window_size, search_size, sigma):
+    """
+    Aplica el filtro de medios no locales (Non-Local Means) a una imagen en escala de grises.
+
+    Parámetros:
+    - I: Imagen en escala de grises (numpy array).
+    - window_size: Tamaño del parche (debe ser impar).
+    - search_size: Tamaño de la región de búsqueda (debe ser impar).
+    - sigma: Parámetro de suavizado.
+
+    Retorna:
+    - Ir: Imagen suavizada.
+    """
+    I = I.astype(np.float32) / 255.0  # Normalizar la imagen
+    height, width = I.shape
+    half_w = window_size // 2
+    half_s = search_size // 2
+    Ir = np.zeros_like(I, dtype=np.float32)
+
+    # Recorremos cada píxel de la imagen de salida
+    for y in range(height):
+        for x in range(width):
+            val = 0
+            norm = 0
+
+            # Recorremos los píxeles dentro de la región de búsqueda
+            for yr in range(max(0, y - half_s), min(height, y + half_s + 1)):
+                for xr in range(max(0, x - half_s), min(width, x + half_s + 1)):
+                    d = 0  # Distancia acumulada
+
+                    # Comparar parches de tamaño window_size × window_size
+                    for dy in range(-half_w, half_w + 1):
+                        for dx in range(-half_w, half_w + 1):
+                            y1, x1 = min(max(y + dy, 0), height - 1), min(max(x + dx, 0), width - 1)
+                            y2, x2 = min(max(yr + dy, 0), height - 1), min(max(xr + dx, 0), width - 1)
+                            d += (I[y1, x1] - I[y2, x2]) ** 2  # Diferencia entre ventanas
+
+                    # Evitar desbordamientos limitando d
+                    d = np.clip(d, 0, 5000)  
+
+                    # Calcular peso basado en similitud
+                    w = np.exp(-d / (2 * sigma ** 2))
+
+                    # Acumular valores ponderados
+                    val += w * I[yr, xr]
+                    norm += w
+
+            # Normalizar el resultado final
+            Ir[y, x] = val / norm if norm > 0 else I[y, x]
+
+    return (Ir * 255).astype(np.uint8)  # Convertir de vuelta a uint8
+
+def BilateralFilter(I, ss, sr, niter):
+    """
+    Aplica un filtro bilateral iterativo a una imagen en escala de grises.
+
+    Parámetros:
+    - I: Imagen en escala de grises (numpy array).
+    - ss: Desviación estándar del kernel espacial.
+    - sr: Desviación estándar del kernel de rango.
+    - niter: Número de iteraciones.
+
+    Retorna:
+    - Imagen filtrada con el filtro bilateral.
+    """
+    I = I.astype(np.float32) / 255.0  # Normalizar la imagen a rango [0,1]
+    height, width = I.shape
+    half_w = int(2.5 * ss)  # Definir el tamaño de la ventana
+
+    for _ in range(niter):  # Aplicar iteraciones
+        Ir = np.zeros_like(I)
+        for y in range(height):
+            for x in range(width):
+                val = 0
+                norm = 0
+                
+                for dy in range(-half_w, half_w + 1):
+                    for dx in range(-half_w, half_w + 1):
+                        nx, ny = x + dx, y + dy
+                        if 0 <= nx < width and 0 <= ny < height:
+                            d2s = dx**2 + dy**2  # Distancia espacial al cuadrado
+                            dr = I[y, x] - I[ny, nx]  # Diferencia de intensidad
+                            
+                            w = np.exp(-d2s / (2 * ss**2)) * np.exp(-dr**2 / (2 * sr**2))
+                            val += w * I[ny, nx]
+                            norm += w
+
+                Ir[y, x] = val / norm if norm > 0 else I[y, x]
+
+        I = Ir.copy()  # Copiar el resultado para la siguiente iteración
+
+    return (I * 255).astype(np.uint8)  # Convertir de vuelta a uint8
+
+def BilateralFilterFast(I, ss, sr, niter, n=3):
+    """
+    Aplica un filtro bilateral rápido a una imagen en escala de grises utilizando un coseno elevado.
+
+    Parámetros:
+    - I: Imagen en escala de grises (numpy array).
+    - ss: Desviación estándar del kernel espacial.
+    - sr: Desviación estándar del kernel de rango.
+    - niter: Número de iteraciones.
+    - n: Parámetro de aproximación (valor recomendado: n=3).
+
+    Retorna:
+    - Imagen filtrada con el filtro bilateral rápido.
+    """
+    I = I.astype(np.float32) / 255.0  # Normalizar imagen a [0,1]
+    g = 1.0 / sr  # Factor de normalización
+    height, width = I.shape
+
+    for _ in range(niter):  # Iteraciones del filtro
+        num = np.zeros_like(I, dtype=np.float32)
+        den = np.zeros_like(I, dtype=np.float32)
+
+        for i in range(n + 1):
+            # Cálculo de coeficientes
+            v = g * (2 * i - n) * I / np.sqrt(n)
+            b = factorial(n) / (factorial(i) * factorial(n - i) * (2 ** (2 * n - 2)))
+
+            # Crear imágenes Hi, Gi y Di (complejas)
+            Hi = np.stack([np.cos(v), np.sin(v)], axis=-1)  # 2 canales: [cos(v), sin(v)]
+            Gi = I[..., np.newaxis] * Hi  # Producto punto con I
+            Di = Hi * b  # Aplicación del peso b
+
+            # Aplicar suavizado Gaussiano separadamente en cada canal
+            Gir = np.stack([gaussian_filter(Gi[..., 0], sigma=ss), 
+                            gaussian_filter(Gi[..., 1], sigma=ss)], axis=-1)
+            Hir = np.stack([gaussian_filter(Hi[..., 0], sigma=ss), 
+                            gaussian_filter(Hi[..., 1], sigma=ss)], axis=-1)
+
+            # Acumulación de numerador y denominador
+            num += Di[..., 0] * Gir[..., 0] + Di[..., 1] * Gir[..., 1]
+            den += Di[..., 0] * Hir[..., 0] + Di[..., 1] * Hir[..., 1]
+
+        # División de los valores y tomar la parte real
+        Ir = np.divide(num, den, out=I, where=den != 0)
+
+        I = Ir.copy()  # Actualizar imagen para la siguiente iteración
+
+    return (I * 255).astype(np.uint8)  # Convertir a uint8 (0-255)
+
+def GaussianFilterGrayscale(img, sigma):
+    """
+    Applies a Gaussian filter to a grayscale image.
+
+    Parameters:
+    - img: Grayscale image (numpy array).
+    - sigma: Standard deviation of the Gaussian filter.
+
+    Returns:
+    - Filtered image with the Gaussian filter applied.
+    """
+    img = img.astype(np.float32) / 255.0  # Normalize the image
+
+    gauss = CreateGaussianKernel(sigma)
+    img_smoothed = ConvolveSeparable(img, gauss, gauss)
+
+    return (img_smoothed * 255).astype(np.uint8)  # Convert back to uint8
+
+def GaussianFilterRGB(img, sigma):
+    """
+    Applies a Gaussian filter to an RGB image.
+
+    Parameters:
+    - img: RGB image (numpy array).
+    - sigma: Standard deviation of the Gaussian filter.
+
+    Returns:
+    - Filtered image with the Gaussian filter applied.
+    """
+    # Verify that the image is RGB
+    if len(img.shape) != 3 or img.shape[2] != 3:
+        raise ValueError("The image must be RGB.")
+
+    # Convert the image to float32 type and normalize it
+    img = img.astype(np.float32) / 255.0
+
+    # Create the Gaussian kernel
+    gauss = CreateGaussianKernel(sigma)
+
+    # Initialize a smoothed image for the three channels
+    img_smoothed = np.zeros_like(img)
+
+    # Apply the Gaussian filter to each channel (R, G, B) independently
+    for i in range(3):  # The three color channels: R, G, B
+        img_smoothed[:, :, i] = ConvolveSeparable(img[:, :, i], gauss, gauss)
+
+    # Convert the smoothed image back to uint8
+    return (img_smoothed * 255).astype(np.uint8)
+
