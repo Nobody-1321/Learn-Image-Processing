@@ -564,6 +564,10 @@ def SobelOperator(image):
     - G: Magnitud del gradiente combinando Gx y Gy.
     """
 
+    #convertir a 32 bits y normalizar
+    
+    image = image.astype(np.float32)
+
     # Definir los kernels de Sobel
     Sobel_x = np.array([[-1, 0, 1], 
                          [-2, 0, 2], 
@@ -588,7 +592,7 @@ def SobelOperator(image):
     Gy = cv.normalize(Gy, None, 0, 255, cv.NORM_MINMAX)
     G = cv.normalize(G, None, 0, 255, cv.NORM_MINMAX)
 
-    return Gx, Gy, G
+    return Gx.astype(np.uint8), Gy.astype(np.uint8), G.astype(np.uint8)
 
 def ScharOperator(image):
         # Definir los kernels de Sobel
