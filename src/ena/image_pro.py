@@ -7,7 +7,7 @@ def channels_bgr(img):
     """
     Splits the input BGR image into its individual blue, green, and red channels.
 
-    Args:
+    Parameters:
         img (numpy.ndarray): Input image in BGR format.
 
     Returns:
@@ -29,7 +29,7 @@ def channels_bgr(img):
 def channels_hsv(img):
         """
         Splits an image into its HSV (Hue, Saturation, Value) channels.
-        Args:
+        Parameters:
             img (numpy.ndarray): Input image in BGR format.
         Returns:
             tuple: A tuple containing three images:
@@ -65,13 +65,13 @@ def resize_image(img, width, height):
     """
     Resize the given image to the specified width and height.
 
-    Parameters:
-    img (numpy.ndarray): The input image to be resized.
-    width (int): The desired width of the resized image.
-    height (int): The desired height of the resized image.
+    Args:
+        img (numpy.ndarray): The input image to be resized.
+        width (int): The desired width of the resized image.
+        height (int): The desired height of the resized image.
 
     Returns:
-    numpy.ndarray: The resized image.
+        numpy.ndarray: The resized image.
     """
     return cv.resize(img, (width, height), interpolation=cv.INTER_AREA)
 
@@ -80,12 +80,13 @@ def save(filename, img):
     Save an image to a file.
 
     Parameters:
-    filename (str): The path to the file where the image will be saved.
-    img (numpy.ndarray): The image to be saved.
+        filename (str): The path to the file where the image will be saved.
+        img (numpy.ndarray): The image to be saved.
 
     Raises:
-    Exception: If there is an error saving the image, an exception is caught and an error message is printed.
+        Exception: If there is an error saving the image, an exception is caught and an error message is printed.
     """
+
     try:
         cv.imwrite(filename, img)
     except Exception as e:
@@ -94,17 +95,17 @@ def save(filename, img):
 def combine_channels(img, red, green, blue):
     """
     Combines separate red, green, and blue channels into a single image.
+
     Parameters:
-    img (numpy.ndarray): The original image used for reference dimensions.
-    red (numpy.ndarray): The red channel image.
-    green (numpy.ndarray): The green channel image.
-    blue (numpy.ndarray): The blue channel image.
+        img (numpy.ndarray): The original image used for reference dimensions.
+        red (numpy.ndarray): The red channel image.
+        green (numpy.ndarray): The green channel image.
+        blue (numpy.ndarray): The blue channel image.
     Returns:
-    numpy.ndarray: The combined image with merged channels, or None if the channel dimensions do not match the original image.
+        numpy.ndarray: The combined image with merged channels, or None if the channel dimensions do not match the original image.
     """
     
     if red.shape[:2] != img.shape[:2] or green.shape[:2] != img.shape[:2] or blue.shape[:2] != img.shape[:2]:
-        print("Error: channel images must have the same dimensions as the original image")
         return None
         
     return cv.merge([blue, green, red])
@@ -114,7 +115,7 @@ def flip_flop_flipflop(img):
     Applies a series of flip operations to the input image.
 
     Parameters:
-    img (numpy.ndarray): The input image to be flipped.
+        img (numpy.ndarray): The input image to be flipped.
 
     Returns:
     tuple: A tuple containing three images:
@@ -131,6 +132,19 @@ def rotate_image(img, angle):
     return cv.warpAffine(img, M, (cols, rows))
 
 def get_combine_channels_rg_rb_gb(img):
+    """
+    Splits the input image into its blue, green, and red channels, and then combines them into three new images:
+    - Red-Green (RG)
+    - Red-Blue (RB)
+    - Green-Blue (GB)
+    Args:
+        img (numpy.ndarray): The input image in BGR format.
+    Returns:
+        tuple: A tuple containing three images:
+            - red_green (numpy.ndarray): Image with combined red and green channels.
+            - red_blue (numpy.ndarray): Image with combined red and blue channels.
+            - green_blue (numpy.ndarray): Image with combined green and blue channels.
+    """
     blue, green, red = cv.split(img)
     zeros = np.zeros(img.shape[:2], dtype="uint8")
     
@@ -140,7 +154,16 @@ def get_combine_channels_rg_rb_gb(img):
     
     return red_green, red_blue, green_blue
 
-def histogram_equalization(img):
+def HistogramEqualization(img):
+    """
+    Apply histogram equalization to an input image.
+    
+    Parameters:
+        img (numpy.ndarray): Input grayscale image as a 2D numpy array.
+    
+    Returns:
+        numpy.ndarray: Image after applying histogram equalization, with the same shape as the input image.
+    """
     # 1. Calcular el histograma
     hist, bins = np.histogram(img.flatten(), bins=256, range=[0, 256])
     
@@ -154,31 +177,102 @@ def histogram_equalization(img):
     
     return img_equalized
 
-def histogram_matching(img_1, img_2):
-    # 1. Calcular el histograma de la imagen de referencia
-    hist_ref, bins = np.histogram(img_1.flatten(), bins=256, range=[0, 256])
+def HistogramMatchingGray(img_ref, img_target):
+    """
+    Perform histogram matching on a grayscale image.
+
+    Parameters:
+        img_ref (numpy.ndarray): Reference grayscale image.
+        img_target (numpy.ndarray): Input grayscale image to be matched.
+
+    Returns:
+        numpy.ndarray: The transformed image with a histogram matching that of the reference image.
+
+    """
+
+    # 1. Compute histogram of the reference image
+    hist_ref, bins = np.histogram(img_ref.flatten(), bins=256, range=[0, 256])
     
-    # 2. Calcular el histograma de la imagen a ecualizar
-    hist, bins = np.histogram(img_2.flatten(), bins=256, range=[0, 256])
+    # 2. Compute histogram of the input image
+    hist, bins = np.histogram(img_target.flatten(), bins=256, range=[0, 256])
     
-    # 3. Calcular la función de distribución acumulativa (CDF) de ambas imágenes
+    # 3. Compute the cumulative distribution function (CDF) for both images
     cdf_ref = hist_ref.cumsum()
-    cdf_ref_normalized = cdf_ref / cdf_ref[-1]
-    
+    cdf_ref_normalized = cdf_ref / cdf_ref[-1]  # Normalize to range [0,1]
+
     cdf = hist.cumsum()
-    cdf_normalized = cdf / cdf[-1]
+    cdf_normalized = cdf / cdf[-1]  # Normalize to range [0,1]
     
-    # 4. Crear la tabla de correspondencia
+    # 4. Create lookup table for histogram mapping
     lookup_table = np.interp(cdf_normalized, cdf_ref_normalized, range(256)).astype(np.uint8)
     
-    # 5. Aplicar la tabla de correspondencia a la imagen a ecualizar
-    img_matched = lookup_table[img_2]
+    # 5. Apply the transformation to the input image
+    img_matched = lookup_table[img_target]
     
     return img_matched
 
-def bgr_to_gray(img):
+def HistogramMatchingRGB(img_ref, img_target):
+    """
+    Perform histogram matching on an RGB image.
+
+    Parameters:
+        img_ref (numpy.ndarray): Reference RGB image.
+        img_target (numpy.ndarray): Target RGB image to be matched.
+
+    Returns:
+    numpy.ndarray: The transformed image with a histogram matching that of the reference image.
+    """
+
+    def match_histogram(channel_ref, channel_target):
+        """Apply histogram matching to a single channel."""
+        hist_ref, _ = np.histogram(channel_ref.flatten(), bins=256, range=[0, 256])
+        hist_target, _ = np.histogram(channel_target.flatten(), bins=256, range=[0, 256])
+        
+        cdf_ref = hist_ref.cumsum() / hist_ref.sum()
+        cdf_target = hist_target.cumsum() / hist_target.sum()
+        
+        lookup_table = np.interp(cdf_target, cdf_ref, np.arange(256)).astype(np.uint8)
+        return lookup_table[channel_target]
+
+    # Convert images to uint8 format (if not already)
+    img_ref = img_ref.astype(np.uint8)
+    img_target = img_target.astype(np.uint8)
+
+    # Split the images into R, G, B channels
+    matched_channels = [
+        match_histogram(img_ref[:, :, i], img_target[:, :, i]) for i in range(3)
+    ]
+
+    # Merge the transformed channels back into an RGB image
+    img_matched = cv.merge(matched_channels)
+
+    return img_matched
+
+def CalHistogram(img):
+    
+    """
+    Compute the histogram of one-channel grayscale image.
+
+    Parameters:
+        img (numpy.ndarray): The input grayscale image.
+
+    Returns:
+        numpy.ndarray: The computed histogram with 256 bins.
+    """
+    # Compute the histogram
+
+    hist, bins = np.histogram(img.flatten(), bins=256, range=[0, 256])
+    
+    return hist
+
+def BgrToGray(img):
+    
+    img = img.astype(np.float32)
+
     blue, green, red = cv.split(img)
+    
     gray_img = 0.299 * red + 0.587 * green + 0.114 * blue
+    
     return gray_img.astype(np.uint8)
     
 def floodfill_separate_output(I, O, p, new_color):
@@ -219,7 +313,7 @@ def connected_components_by_repeated_floodfill(I):
     """
     Finds connected components using repeated Flood Fill.
 
-    Args:
+    Parameters:
         I (numpy.ndarray): Input binary image where object pixels are greater than 0.
 
     Returns:
@@ -237,7 +331,7 @@ def connected_components_by_repeated_floodfill(I):
 
     return L  # Labeled image
 
-def show_two_images_side_by_side(img1, img2, title="Comparison", orientation="horizontal"):
+def show_two_images(img1, img2, title="Comparison", orientation="horizontal"):
     """
     Displays two images side by side in a single window using OpenCV.
     
@@ -660,27 +754,101 @@ def ComputeImageGradient(img, sigma):
     
     return Gx.astype(np.uint8), Gy.astype(np.uint8), Gmag.astype(np.uint8), Gphase.astype(np.uint8)
 
-def AddGaussianNoise(I, sigma):
+def AddGaussianNoise(img, sigma):
     """
-    Agrega ruido gaussiano independiente a una imagen en escala de grises.
+    Adds independent Gaussian noise to a grayscale image.
 
-    Parámetros:
-    - I: Imagen de entrada en escala de grises (numpy array).
-    - sigma: Desviación estándar del ruido gaussiano.
+    Parameters:
+    - img: Input grayscale image (numpy array).
+    - sigma: Standard deviation of the Gaussian noise.
 
-    Retorna:
-    - Ir: Imagen con ruido agregado.
+    Returns:
+    - Image with added noise.
     """
-    # Generar ruido gaussiano con media 0 y desviación estándar sigma
-    noise = np.random.normal(0, sigma, I.shape).astype(np.float32)
+    # Generate Gaussian noise with mean 0 and standard deviation sigma
+    noise = np.random.normal(0, sigma, img.shape).astype(np.float32)
+    
+    # Add the noise to the original image
+    Ir = img.astype(np.float32) + noise
 
-    # Sumar el ruido a la imagen original
-    Ir = I.astype(np.float32) + noise
-
-    # Clampeamos los valores para que estén en el rango [0, 255]
+    # Clamp the values to be in the range [0, 255]
     Ir = np.clip(Ir, 0, 255).astype(np.uint8)
-
+ 
     return Ir
+
+def AddSaltAndPepperNoise(img, salt_prob, pepper_prob):
+    """
+    Adds salt and pepper noise to a grayscale image.
+    
+    Parameters:
+    - img: Input grayscale image (numpy array).
+    - salt_prob: Probability of adding salt noise (white pixels).
+    - pepper_prob: Probability of adding pepper noise (black pixels).
+    
+    Returns:
+    - Noisy image with salt and pepper noise added.
+    """
+    noisy_img = img.copy()
+    num_salt = np.ceil(salt_prob * img.size)
+    num_pepper = np.ceil(pepper_prob * img.size)
+
+    # Add salt noise
+    coords = [np.random.randint(0, i - 1, int(num_salt)) for i in img.shape]
+    noisy_img[coords[0], coords[1]] = 255
+
+    # Add pepper noise
+    coords = [np.random.randint(0, i - 1, int(num_pepper)) for i in img.shape]
+    noisy_img[coords[0], coords[1]] = 0
+
+    return noisy_img
+
+def AddPoissonNoise(img):
+    """
+    Adds Poisson noise to a grayscale image.
+    
+    Parameters:
+    - img: Input grayscale image (numpy array).
+    
+    Returns:
+    - Noisy image with Poisson noise added.
+    """
+
+    noisy_img = np.random.poisson(img).astype(np.uint8)
+
+    return noisy_img
+
+def AddUniformNoise(img, low, high):
+    """
+    Adds uniform noise to a grayscale image.
+    
+    Parameters:
+    - img: Input grayscale image (numpy array).
+    - low: Lower bound of the uniform distribution.
+    - high: Upper bound of the uniform distribution.
+    
+    Returns:
+    - Noisy image with uniform noise added.
+    """
+    noise = np.random.uniform(low, high, img.shape).astype(np.float32)
+    noisy_img = img.astype(np.float32) + noise
+    noisy_img = np.clip(noisy_img, 0, 255).astype(np.uint8)
+    return noisy_img
+
+def AddSpeckleNoise(img, sigma):
+    """
+    Adds speckle noise to a grayscale image.
+    
+    Parameters:
+    - img: Input grayscale image (numpy array).
+    - sigma: Standard deviation of the Gaussian noise.
+    
+    Returns:
+    - Noisy image with speckle noise added.
+    """
+    noise = np.random.normal(0, sigma, img.shape).astype(np.float32)
+    noisy_img = img.astype(np.float32) + img.astype(np.float32) * noise
+    noisy_img = np.clip(noisy_img, 0, 255).astype(np.uint8)
+    return noisy_img
 
 def MedianFilter1(image, window_size):
     """
@@ -965,3 +1133,28 @@ def GaussianFilterRGB(img, sigma):
     # Convert the smoothed image back to uint8
     return (img_smoothed * 255).astype(np.uint8)
 
+# thresholding methods
+
+def RidlerCalvardThreshold(img, max_iterations=100, tolerance=1e-3):
+
+    T_old = np.mean(img)
+    
+    for _ in range(max_iterations):
+        G1 = img[img <= T_old]  
+        G2 = img[img > T_old]
+        
+        if len(G1) == 0 or len(G2) == 0:
+            break  
+        
+        mu1 = np.mean(G1)
+        mu2 = np.mean(G2)
+        T_new = (mu1 + mu2) / 2
+        
+        if abs(T_new - T_old) < tolerance:
+            break
+        
+        T_old = T_new
+
+        print(len(G1), len(G2), mu1, mu2, T_new, T_old)
+
+    return T_old

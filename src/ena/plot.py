@@ -1,7 +1,3 @@
-import cv2 
-import numpy 
-import matplotlib.pyplot as plt
-
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
@@ -131,3 +127,39 @@ def show_image_with_histogram(img, title="Image"):
     plt.tight_layout()
     plt.show()
 
+
+def plot_images_and_histograms(img1, img2, img_equalized_manual1, img_equalized_manual2):
+    """
+    Plots the original images, their histograms, the equalized images, and their histograms.
+    
+    Parameters:
+        img1 (numpy.ndarray): First original grayscale image.
+        img2 (numpy.ndarray): Second original grayscale image.
+        img_equalized_manual1 (numpy.ndarray): Manually equalized first image.
+        img_equalized_manual2 (numpy.ndarray): Manually equalized second image.
+    """
+    
+    plt.figure(figsize=(12, 8))
+
+    # Primera imagen y su histograma
+    plt.subplot(2, 2, 1)
+    plt.title("Imagen 1")
+    plt.imshow(img1, cmap='gray')
+    plt.axis("off")
+
+    plt.subplot(2, 2, 2)
+    plt.title("Histograma Imagen 1")
+    plt.hist(img1.flatten(), bins=256, range=[0, 256], color='black')
+
+    # Segunda imagen y su histograma
+    plt.subplot(2, 2, 3)
+    plt.title("Imagen 2")
+    plt.imshow(img2, cmap='gray')
+    plt.axis("off")
+
+    plt.subplot(2, 2, 4)
+    plt.title("Histograma Imagen 2")
+    plt.hist(img2.flatten(), bins=256, range=[0, 256], color='black')
+
+    plt.tight_layout()
+    plt.show()

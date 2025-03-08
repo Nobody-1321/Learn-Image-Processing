@@ -30,8 +30,7 @@ def main():
     global img, imgCopy
 
     # Cargar la imagen
-    path = ena.parse_args_path()
-    img = cv.imread(path, cv.IMREAD_GRAYSCALE)
+    img = cv.imread("img_data/astro.jpg",cv.IMREAD_GRAYSCALE)
 
     # Copia inicial de la imagen
     imgCopy = img.copy()

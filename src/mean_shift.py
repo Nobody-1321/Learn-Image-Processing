@@ -67,7 +67,6 @@ def MeanShiftFilterFast(I, hs, hr, grid_step=2, max_iter=10, threshold=1e-3):
 # Ejemplo de uso
 def main():
     #img = cv2.imread("img_data/caballo.webp", cv2.IMREAD_GRAYSCALE)
-    img = cv2.imread("img_data/paper.png", cv2.IMREAD_GRAYSCALE)
     #img = cv2.imread("img_data/astro.jpg", cv2.IMREAD_GRAYSCALE)
     #img = cv2.imread("img_data/caballo.webp", cv2.IMREAD_GRAYSCALE)
 

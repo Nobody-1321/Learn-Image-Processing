@@ -58,8 +58,9 @@ def adaptive_smoothing(I, sigma, window_size=5):
     return np.clip(I_smooth, 0, 255).astype(np.uint8)  # Convertir a uint8
 
 # Cargar imagen de prueba
-I = cv2.imread("img_data/paper.png", cv2.IMREAD_GRAYSCALE)
-
+#I = cv2.imread("img_data/salt_papper.png", cv2.IMREAD_GRAYSCALE)
+I = cv2.imread("img_data/M4.jpg", cv2.IMREAD_GRAYSCALE)
+I = cv2.resize(I, (400, 400))
 
 # Aplicar suavizado adaptativo
 I_smooth = adaptive_smoothing(I, sigma=9)

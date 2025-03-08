@@ -77,21 +77,22 @@ def enhance_image(image):
     H, S, I = cv2.split(hsi)
 
     # Estimación de la iluminación con WGIF
-    I_smooth = weighted_guided_filter(I, I, r=5, eps=0.1)
+    I_smooth = weighted_guided_filter(I, I, r=5, eps=0.04)
 
     # Corrección de brillo con Gamma Adaptativo
     a = np.mean(I_smooth)
-    gamma_corrected = (I_smooth + a) / (1.2 + a)
+    gamma_corrected = (I_smooth + a) / (1.3 + a)
     
     # Suavizado del componente de reflexión
     R = I / (I_smooth + 1e-6)  # Evitar división por cero
-    R_smooth = weighted_guided_filter(R, R, r=5, eps=0.1)
+    R_smooth = weighted_guided_filter(R, R, r=5, eps=0.036)
 
     # Fusión de la imagen corregida
     I_enhanced = gamma_corrected * R_smooth
 
     # Restauración del color
     alpha = I_enhanced / (I + 1e-6)
+
     R_new = np.clip(alpha * image[:, :, 0], 0, 255).astype(np.uint8)
     G_new = np.clip(alpha * image[:, :, 1], 0, 255).astype(np.uint8)
     B_new = np.clip(alpha * image[:, :, 2], 0, 255).astype(np.uint8)
@@ -100,10 +101,12 @@ def enhance_image(image):
     return enhanced_image
 
 # Prueba con una imagen de ejemplo
-image = cv2.imread("img_data/lowlight.jpg")  # Cambiar por la imagen real
+#image = cv2.imread("img_data/lowlight.jpg")  # Cambiar por la imagen real
+image = cv2.imread("img_data/blue_dark.jpg")  # Cambiar por la imagen real
+
 image = cv2.resize(image, (640, 480))  # Redimensionar para visualización
 if image is not None:
     enhanced_image = enhance_image(image)
-    cv2.imwrite("enhanced_example.jpg", enhanced_image)
+    cv2.imwrite("enhanced_example1.jpg", enhanced_image)
 
 "Implementación completada."

@@ -13,9 +13,7 @@ def linear_contrast_stretch(img):
 
 def main():
     # Leer la imagen en escala de grises
-    path = ena.parse_args_path()
-
-    img = cv.imread(path, cv.IMREAD_GRAYSCALE)
+    img = cv.imread("img_data/noct.jpeg", cv.IMREAD_GRAYSCALE)
 
     # Aplicar Linear Contrast Stretch
     img_stretched = linear_contrast_stretch(img)
