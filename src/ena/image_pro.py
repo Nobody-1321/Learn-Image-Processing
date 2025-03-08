@@ -1158,3 +1158,48 @@ def RidlerCalvardThreshold(img, max_iterations=100, tolerance=1e-3):
         print(len(G1), len(G2), mu1, mu2, T_new, T_old)
 
     return T_old
+
+def compute_histogram(I):
+    """Calcula el histograma de la imagen en escala de grises."""
+    hist = cv.calcHist([I], [0], None, [256], [0, 256])
+    return hist.flatten()
+
+def OtsuThreshold(I):
+    """Implementación del algoritmo de Otsu para encontrar el umbral óptimo."""
+    # 1. Calcular el histograma
+    hist = compute_histogram(I)
+    total_pixels = I.size
+    
+    # Inicialización de las medias m0 y m1
+    m0 = 0
+    m1 = np.sum(np.arange(256) * hist)
+    w0 = 0
+    w1 = np.sum(hist)
+    
+    # 2. Calcular el umbral óptimo
+    max_between_class_variance = 0
+    optimal_threshold = 0
+    
+    # Calcular la varianza intra-clase para cada umbral
+    for t in range(1, 256):  # Iterar por todos los posibles umbrales (1 a 255)
+        w0 += hist[t - 1]  # Proporción de píxeles en el grupo 0 (fondo)
+        w1 -= hist[t - 1]  # Proporción de píxeles en el grupo 1 (objeto)
+        
+        # Calcular las medias de los grupos
+        m0 += (t - 1) * hist[t - 1]
+        m1 -= (t - 1) * hist[t - 1]
+        
+        # Si no hay píxeles en el fondo o en el objeto, continuar
+        if w0 == 0 or w1 == 0:
+            continue
+        
+        # Calcular la varianza entre clases
+        mean_diff = m0 / w0 - m1 / w1
+        between_class_variance = w0 * w1 * mean_diff ** 2
+        
+        # Comparar la varianza entre clases
+        if between_class_variance > max_between_class_variance:
+            max_between_class_variance = between_class_variance
+            optimal_threshold = t
+    
+    return optimal_threshold
