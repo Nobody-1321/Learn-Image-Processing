@@ -1,6 +1,6 @@
 import cv2 as cv
 import numpy as np
-import ena
+import lip
 
 def linear_contrast_stretch(img):
     # Encontrar los valores mínimo y máximo de la imagen original

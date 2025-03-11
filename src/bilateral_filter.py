@@ -1,6 +1,6 @@
 import cv2
 import matplotlib.pyplot as plt
-import ena
+import lip
 
 def main():
 
@@ -8,10 +8,10 @@ def main():
     img = cv2.resize(img, (400, 400))
 
     # Aplicar filtro gaussiano
-    img_smoothed = ena.BilateralFilterFast(img, 1.5, 1.5, 4)
+    img_smoothed = lip.BilateralFilterFast(img, 1.5, 1.5, 4)
     
     #comparar histogramas
-    ena.compare_histograms(img, img_smoothed, "Original", "Smoothed")
+    lip.compare_histograms(img, img_smoothed, "Original", "Smoothed")
 
     # Mostrar imágenes
     cv2.imshow("Original", img)

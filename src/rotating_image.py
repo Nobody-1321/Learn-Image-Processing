@@ -1,4 +1,4 @@
-import ena
+import lip
 import tkinter as tk
 from tkinter import Label
 from PIL import Image, ImageTk
@@ -30,26 +30,26 @@ def show_image(index):
 def save_image(img):
     global current_index
     filename = f"output_{image_titles[current_index].replace(' ', '_').lower()}.jpg"
-    img = ena.get_rotate_image(img, image_titles[current_index])
-    ena.save(filename, img)
+    img = lip.get_rotate_image(img, image_titles[current_index])
+    lip.save(filename, img)
     print(f"Imagen guardada como {filename}")
 
 def main():
     
-    path = ena.parse_args_path()
-    img = ena.open_image(path) 
+    path = lip.parse_args_path()
+    img = lip.open_image(path) 
     
     if img is None:
         print("Error: Could not load the image.")
         exit()
 
     img_copy = img.copy()
-    img_copy = ena.resize_image(img_copy, 1280, 720)
+    img_copy = lip.resize_image(img_copy, 1280, 720)
 
     images.append(img_copy)
-    images.append(ena.rotate_image(img_copy, -90))
-    images.append(ena.rotate_image(img_copy, 90))
-    images.append(ena.rotate_image(img_copy, 180))
+    images.append(lip.rotate_image(img_copy, -90))
+    images.append(lip.rotate_image(img_copy, 90))
+    images.append(lip.rotate_image(img_copy, 180))
     
     image_titles.extend(["original image", "-90", "90", "180"])
 

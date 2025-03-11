@@ -266,6 +266,15 @@ def CalHistogram(img):
     return hist
 
 def BgrToGray(img):
+    """
+    Convert a BGR image to a grayscale image.
+    This function takes an image in BGR format and converts it to a grayscale image.
+    
+    Parameters:
+        - img (numpy.ndarray): Input image in BGR format.
+    Returns:
+        - numpy.ndarray: Grayscale image.
+    """
     
     img = img.astype(np.float32)
 
@@ -273,6 +282,8 @@ def BgrToGray(img):
     
     gray_img = 0.299 * red + 0.587 * green + 0.114 * blue
     
+    gray_img = np.clip(gray_img, 0, 255)
+
     return gray_img.astype(np.uint8)
     
 def floodfill_separate_output(I, O, p, new_color):

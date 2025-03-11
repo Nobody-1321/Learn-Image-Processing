@@ -1,4 +1,4 @@
-# image processing examples
+# image processing.
 Image processing is a very interesting field, somewhat complex, but not boring because of it.
 ---------
 ## Build & Run

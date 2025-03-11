@@ -1,4 +1,4 @@
-import ena
+import lip
 import numpy as np
 import cv2 as cv
 
@@ -16,10 +16,10 @@ def main():
     #img_noise = ena.AddSaltAndPepperNoise(img, 0.02, 0.08)
     #img_noise = ena.AddPoissonNoise(img)
     #img_noise = ena.AddUniformNoise(img, 10, 100)
-    img_noise = ena.AddSpeckleNoise(img, 0.1)
+    img_noise = lip.AddSpeckleNoise(img, 0.1)
 
 
-    ena.show_two_images_side_by_side(img, img_noise, "Original vs Noise", "horizontal")
+    lip.show_two_images_side_by_side(img, img_noise, "Original vs Noise", "horizontal")
     cv.waitKey(0)
     cv.destroyAllWindows()
 

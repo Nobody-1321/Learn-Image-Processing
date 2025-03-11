@@ -1,6 +1,6 @@
 import cv2
 import matplotlib.pyplot as plt
-import ena
+import lip
 
 def main():
 
@@ -8,9 +8,9 @@ def main():
     
     img = cv2.resize(img, (400, 400))
 
-    img_smoothed = ena.MedianFilter(img, 5)
+    img_smoothed = lip.MedianFilter(img, 5)
 
-    ena.compare_histograms(img, img_smoothed, "Original", "Smoothed")
+    lip.compare_histograms(img, img_smoothed, "Original", "Smoothed")
 
 
     cv2.imshow("Original Image", img)

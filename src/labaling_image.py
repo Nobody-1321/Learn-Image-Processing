@@ -1,4 +1,4 @@
-import ena 
+import lip 
 import cv2 as cv
 import numpy as np
 
@@ -38,8 +38,8 @@ if __name__ == "__main__":
     #img = cv.bitwise_not(img)
 
     # Aplicar Connected Components con Union-Find
-    labeled_img_4 = ena.connected_components_by_union_find(img)
-    labeled_img_8 = ena.connected_components_by_union_find_8_connected(img)
+    labeled_img_4 = lip.connected_components_by_union_find(img)
+    labeled_img_8 = lip.connected_components_by_union_find_8_connected(img)
 
     # Normalizar para visualización en escala de grises (0-255)
     normalized_img_4 = cv.normalize(labeled_img_4, None, 0, 255, cv.NORM_MINMAX)
@@ -55,7 +55,7 @@ if __name__ == "__main__":
     np.savetxt("img_data/arte_4.txt", labeled_img_4, fmt='%d')
     np.savetxt("img_data/arte_8.txt", labeled_img_8, fmt='%d')
 
-    ena.show_two_images_side_by_side(normalized_img_8, normalized_img_4, "Equitetada 8 vs. Etiquetada_4", "horizontal")
+    lip.show_two_images_side_by_side(normalized_img_8, normalized_img_4, "Equitetada 8 vs. Etiquetada_4", "horizontal")
 
     # Aplicar color map    
     color_img_4 = apply_color_map(labeled_img_4)
@@ -78,7 +78,7 @@ if __name__ == "__main__":
     overlay_img_8 = cv.erode(overlay_img_8, kernel, iterations=1)
 
     # Mostrar las imágenes etiquetadas en color superpuestas sobre la imagen original
-    ena.show_two_images_side_by_side(normalized_img_4, overlay_img_4, "Etiquetada 4", "horizontal")
-    ena.show_two_images_side_by_side(normalized_img_8, overlay_img_8, "Etiquetada 8", "horizontal")
+    lip.show_two_images_side_by_side(normalized_img_4, overlay_img_4, "Etiquetada 4", "horizontal")
+    lip.show_two_images_side_by_side(normalized_img_8, overlay_img_8, "Etiquetada 8", "horizontal")
     cv.waitKey(0)
     cv.destroyAllWindows()

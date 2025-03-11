@@ -1,4 +1,4 @@
-import ena
+import lip
 import cv2 as cv
 import numpy as np
 def main():
@@ -7,7 +7,7 @@ def main():
 
     img = cv.resize(img, (800, 600))
 
-    threshold = ena.RidlerCalvardThreshold(img)
+    threshold = lip.RidlerCalvardThreshold(img)
 
     # Aplicar umbralización
     _, img_threshold = cv.threshold(img, threshold, 255, cv.THRESH_BINARY)

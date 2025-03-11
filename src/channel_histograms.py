@@ -1,10 +1,10 @@
 import cv2 as cv
 import matplotlib.pyplot as plt
-import ena
+import lip
 
 # Load the image
 
-path = ena.parse_args_path()
+path = lip.parse_args_path()
 
 img = cv.imread(path)
 if img is None:
@@ -12,7 +12,7 @@ if img is None:
     exit()
 
 # Split the color channels
-b, g, r = ena.channels_bgr(img)
+b, g, r = lip.channels_bgr(img)
 
 # Prepare data for the channels
 channels = [

@@ -1,4 +1,4 @@
-import ena
+import lip
 import numpy as np
 import cv2 as cv
 
@@ -15,9 +15,9 @@ def main():
 
     # Crear el kernel gaussiano
     #gauss = ena.CreateGaussianKernel(1)
-    gauss = ena.CreateGaussianDerivativeKernel(0.666)
+    gauss = lip.CreateGaussianDerivativeKernel(0.666)
     # Aplicar la convolución separable
-    img_smoothed = ena.ConvolveSeparable(img, gauss, gauss)
+    img_smoothed = lip.ConvolveSeparable(img, gauss, gauss)
     
     #img_smoothed = ena.ConvolveBox(img, 20)
     

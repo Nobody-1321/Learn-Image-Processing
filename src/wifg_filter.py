@@ -1,6 +1,6 @@
 import numpy as np
 import cv2
-import ena
+import lip
 
 def weighted_guided_filter(I, p, r, eps, W):
     """
@@ -58,7 +58,7 @@ def weighted_guided_filter(I, p, r, eps, W):
 # Cargar imagen en escala de grises
 image = cv2.imread('img_data/salt_papper.png', cv2.IMREAD_GRAYSCALE)
 
-grad_x, grad_y, grad_magnitude = ena.SobelOperator(image)
+grad_x, grad_y, grad_magnitude = lip.SobelOperator(image)
 
 grad_magnitude = grad_magnitude.astype(np.float32)
 W = np.exp(-grad_magnitude / (grad_magnitude.max() + 1e-6))
