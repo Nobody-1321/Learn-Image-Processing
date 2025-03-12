@@ -162,7 +162,7 @@ def HistogramEqualization(img):
         img (numpy.ndarray): Input grayscale image as a 2D numpy array.
     
     Returns:
-        numpy.ndarray: Image after applying histogram equalization, with the same shape as the input image.
+        img: Image after applying histogram equalization, with the same shape as the input image.
     """
     # 1. Calcular el histograma
     hist, bins = np.histogram(img.flatten(), bins=256, range=[0, 256])
@@ -170,9 +170,10 @@ def HistogramEqualization(img):
     # 2. Calcular la función de distribución acumulativa (CDF)
     cdf = hist.cumsum()
     cdf_normalized = cdf / cdf[-1]  # Normalizar el CDF para que vaya de 0 a 1
-    
+
     # 3. Mapear los valores originales a los nuevos valores usando la CDF
     cdf_scaled = (cdf_normalized * 255).astype(np.uint8)  # Escalar a [0, 255]
+    
     img_equalized = cdf_scaled[img]  # Usar la CDF como lookup table
     
     return img_equalized
@@ -264,6 +265,125 @@ def CalHistogram(img):
     hist, bins = np.histogram(img.flatten(), bins=256, range=[0, 256])
     
     return hist
+
+def ClipHistogram(hist, clip_limit):
+    """
+    Clips the histogram by limiting each bin to the clip_limit and redistributes
+    the clipped amount uniformly among all the bins.
+    """
+    excess = hist - clip_limit
+    excess[excess < 0] = 0
+    total_excess = np.sum(excess)
+    
+    # Clip the histogram
+    hist = np.minimum(hist, clip_limit)
+    
+    # Redistribute the excess uniformly
+    redist = total_excess // 256
+    hist = hist + redist
+    
+    # Distribute the remainder sequentially
+    remainder = total_excess % 256
+    for i in range(256):
+        if remainder <= 0:
+            break
+        hist[i] += 1
+        remainder -= 1
+    return hist
+
+def CreateMapping(hist, block_size):
+    """
+    Calculates the mapping function (lookup table) from the clipped histogram
+    using the cumulative distribution function (CDF).
+    """
+    cdf = np.cumsum(hist)
+    # Avoid division by zero: find the first non-zero value
+    cdf_min = cdf[np.nonzero(cdf)][0]
+    
+    # Normalize the CDF to [0, 255]
+    mapping = np.round((cdf - cdf_min) / float(block_size - cdf_min) * 255).astype(np.uint8)
+    return mapping
+
+def HistogramEqualizationClahe(image, clip_limit=10, grid_size=(8, 8)):
+    """
+    Applies CLAHE (Contrast Limited Adaptive Histogram Equalization) to a grayscale image.
+    
+    Parameters:
+        image: uint8 numpy array of shape (height, width).
+        clip_limit: maximum allowed value for each histogram bin.
+        grid_size: tuple (n_rows, n_cols) indicating how many blocks the image is divided into.
+        
+    Returns:
+        equalized_image: uint8 numpy array of the resulting image with enhanced contrast.
+    """
+    height, width = image.shape
+    n_rows, n_cols = grid_size
+
+    # Size of each block (assuming integer division; the last block may be slightly larger)
+    cell_h = height // n_rows
+    cell_w = width // n_cols
+
+    # Generate the mapping table for each block
+    mappings = [[None for _ in range(n_cols)] for _ in range(n_rows)]
+    for i in range(n_rows):
+        for j in range(n_cols):
+            r0 = i * cell_h
+            r1 = (i + 1) * cell_h if i < n_rows - 1 else height
+            c0 = j * cell_w
+            c1 = (j + 1) * cell_w if j < n_cols - 1 else width
+            
+            block = image[r0:r1, c0:c1]
+            hist = CalHistogram(block)
+            hist_clipped = ClipHistogram(hist, clip_limit)
+            mapping = CreateMapping(hist_clipped, block.size)
+            mappings[i][j] = mapping
+
+    # Create the output image
+    output = np.zeros_like(image, dtype=np.uint8)
+    
+    # Apply bilinear interpolation for each pixel using the 4 neighboring mappings
+    for y in range(height):
+        i_f = (y + 0.5) / cell_h - 0.5
+        i0 = int(np.floor(i_f))
+        i1 = i0 + 1
+        y_weight = i_f - i0
+        
+        if i0 < 0:
+            i0 = 0
+            i1 = 0
+            y_weight = 0
+        elif i1 >= n_rows:
+            i1 = n_rows - 1
+            i0 = n_rows - 1
+            y_weight = 0
+        
+        for x in range(width):
+            j_f = (x + 0.5) / cell_w - 0.5
+            j0 = int(np.floor(j_f))
+            j1 = j0 + 1
+            x_weight = j_f - j0
+            
+            if j0 < 0:
+                j0 = 0
+                j1 = 0
+                x_weight = 0
+            elif j1 >= n_cols:
+                j1 = n_cols - 1
+                j0 = n_cols - 1
+                x_weight = 0
+
+            intensity = image[y, x]
+            val_tl = mappings[i0][j0][intensity]
+            val_tr = mappings[i0][j1][intensity]
+            val_bl = mappings[i1][j0][intensity]
+            val_br = mappings[i1][j1][intensity]
+            
+            top = val_tl * (1 - x_weight) + val_tr * x_weight
+            bottom = val_bl * (1 - x_weight) + val_br * x_weight
+            pixel_val = top * (1 - y_weight) + bottom * y_weight
+            output[y, x] = int(np.round(pixel_val))
+    
+    return output
 
 def BgrToGray(img):
     """
@@ -1170,15 +1290,10 @@ def RidlerCalvardThreshold(img, max_iterations=100, tolerance=1e-3):
 
     return T_old
 
-def compute_histogram(I):
-    """Calcula el histograma de la imagen en escala de grises."""
-    hist = cv.calcHist([I], [0], None, [256], [0, 256])
-    return hist.flatten()
-
 def OtsuThreshold(I):
     """Implementación del algoritmo de Otsu para encontrar el umbral óptimo."""
     # 1. Calcular el histograma
-    hist = compute_histogram(I)
+    hist = CalHistogram(I)
     total_pixels = I.size
     
     # Inicialización de las medias m0 y m1

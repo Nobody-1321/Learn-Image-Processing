@@ -127,7 +127,6 @@ def show_image_with_histogram(img, title="Image"):
     plt.tight_layout()
     plt.show()
 
-
 def plot_images_and_histograms(img1, img2, img_equalized_manual1, img_equalized_manual2):
     """
     Plots the original images, their histograms, the equalized images, and their histograms.
@@ -138,7 +137,9 @@ def plot_images_and_histograms(img1, img2, img_equalized_manual1, img_equalized_
         img_equalized_manual1 (numpy.ndarray): Manually equalized first image.
         img_equalized_manual2 (numpy.ndarray): Manually equalized second image.
     """
-    
+    img1 = cv2.cvtColor(img1, cv2.COLOR_BGR2RGB)
+    img2 = cv2.cvtColor(img2, cv2.COLOR_BGR2RGB)
+
     plt.figure(figsize=(12, 8))
 
     # Primera imagen y su histograma
@@ -160,6 +161,140 @@ def plot_images_and_histograms(img1, img2, img_equalized_manual1, img_equalized_
     plt.subplot(2, 2, 4)
     plt.title("Histograma Imagen 2")
     plt.hist(img2.flatten(), bins=256, range=[0, 256], color='black')
+
+    plt.tight_layout()
+    plt.show()
+
+def plot_three_images_and_histograms(img1, img2, img3, title1="Imagen 1", title2="Imagen 2", title3="Imagen 3"):
+    """
+    Plots three images and their histograms side by side using Matplotlib.
+    
+    Parameters:
+        img1 (numpy.ndarray): First image (grayscale or color).
+        img2 (numpy.ndarray): Second image (grayscale or color).
+        img3 (numpy.ndarray): Third image (grayscale or color).
+        title1 (str): Title for the first image.
+        title2 (str): Title for the second image.
+        title3 (str): Title for the third image.
+    """
+    
+    plt.figure(figsize=(15, 10))
+
+    # Primera imagen y su histograma
+    plt.subplot(3, 2, 1)
+    plt.title(title1)
+    if len(img1.shape) == 2:  # Imagen en escala de grises
+        plt.imshow(img1, cmap='gray')
+    else:  # Imagen en color (Convertir de BGR a RGB para matplotlib)
+        plt.imshow(cv2.cvtColor(img1, cv2.COLOR_BGR2RGB))
+    plt.axis("off")
+
+    plt.subplot(3, 2, 2)
+    plt.title(f"Histograma {title1}")
+    if len(img1.shape) == 2:  # Imagen en escala de grises
+        plt.hist(img1.flatten(), bins=256, range=[0, 256], color='black')
+    else:  # Imagen en color
+        colors = ('blue', 'green', 'red')
+        for i, color in enumerate(colors):
+            hist = cv2.calcHist([img1], [i], None, [256], [0, 256])
+            plt.plot(hist, color=color, label=f"{color.capitalize()} Channel")
+        plt.legend()
+
+    # Segunda imagen y su histograma
+    plt.subplot(3, 2, 3)
+    plt.title(title2)
+    if len(img2.shape) == 2:  # Imagen en escala de grises
+        plt.imshow(img2, cmap='gray')
+    else:  # Imagen en color (Convertir de BGR a RGB para matplotlib)
+        plt.imshow(cv2.cvtColor(img2, cv2.COLOR_BGR2RGB))
+    plt.axis("off")
+
+    plt.subplot(3, 2, 4)
+    plt.title(f"Histograma {title2}")
+    if len(img2.shape) == 2:  # Imagen en escala de grises
+        plt.hist(img2.flatten(), bins=256, range=[0, 256], color='black')
+    else:  # Imagen en color
+        colors = ('blue', 'green', 'red')
+        for i, color in enumerate(colors):
+            hist = cv2.calcHist([img2], [i], None, [256], [0, 256])
+            plt.plot(hist, color=color, label=f"{color.capitalize()} Channel")
+        plt.legend()
+
+    # Tercera imagen y su histograma
+    plt.subplot(3, 2, 5)
+    plt.title(title3)
+    if len(img3.shape) == 2:  # Imagen en escala de grises
+        plt.imshow(img3, cmap='gray')
+    else:  # Imagen en color (Convertir de BGR a RGB para matplotlib)
+        plt.imshow(cv2.cvtColor(img3, cv2.COLOR_BGR2RGB))
+    plt.axis("off")
+
+    plt.subplot(3, 2, 6)
+    plt.title(f"Histograma {title3}")
+    if len(img3.shape) == 2:  # Imagen en escala de grises
+        plt.hist(img3.flatten(), bins=256, range=[0, 256], color='black')
+    else:  # Imagen en color
+        colors = ('blue', 'green', 'red')
+        for i, color in enumerate(colors):
+            hist = cv2.calcHist([img3], [i], None, [256], [0, 256])
+            plt.plot(hist, color=color, label=f"{color.capitalize()} Channel")
+        plt.legend()
+
+    plt.tight_layout()
+    plt.show()
+
+def plot_two_images_and_histograms(img1, img2, title1="Imagen 1", title2="Imagen 2"):
+    """
+    Plots two images and their histograms side by side using Matplotlib.
+    
+    Parameters:
+        img1 (numpy.ndarray): First image (grayscale or color).
+        img2 (numpy.ndarray): Second image (grayscale or color).
+        title1 (str): Title for the first image.
+        title2 (str): Title for the second image.
+    """
+    
+    plt.figure(figsize=(12, 8))
+
+    # Primera imagen y su histograma
+    plt.subplot(2, 2, 1)
+    plt.title(title1)
+    if len(img1.shape) == 2:  # Imagen en escala de grises
+        plt.imshow(img1, cmap='gray')
+    else:  # Imagen en color (Convertir de BGR a RGB para matplotlib)
+        plt.imshow(cv2.cvtColor(img1, cv2.COLOR_BGR2RGB))
+    plt.axis("off")
+
+    plt.subplot(2, 2, 2)
+    plt.title(f"Histograma {title1}")
+    if len(img1.shape) == 2:  # Imagen en escala de grises
+        plt.hist(img1.flatten(), bins=256, range=[0, 256], color='black')
+    else:  # Imagen en color
+        colors = ('blue', 'green', 'red')
+        for i, color in enumerate(colors):
+            hist = cv2.calcHist([img1], [i], None, [256], [0, 256])
+            plt.plot(hist, color=color, label=f"{color.capitalize()} Channel")
+        plt.legend()
+
+    # Segunda imagen y su histograma
+    plt.subplot(2, 2, 3)
+    plt.title(title2)
+    if len(img2.shape) == 2:  # Imagen en escala de grises
+        plt.imshow(img2, cmap='gray')
+    else:  # Imagen en color (Convertir de BGR a RGB para matplotlib)
+        plt.imshow(cv2.cvtColor(img2, cv2.COLOR_BGR2RGB))
+    plt.axis("off")
+
+    plt.subplot(2, 2, 4)
+    plt.title(f"Histograma {title2}")
+    if len(img2.shape) == 2:  # Imagen en escala de grises
+        plt.hist(img2.flatten(), bins=256, range=[0, 256], color='black')
+    else:  # Imagen en color
+        colors = ('blue', 'green', 'red')
+        for i, color in enumerate(colors):
+            hist = cv2.calcHist([img2], [i], None, [256], [0, 256])
+            plt.plot(hist, color=color, label=f"{color.capitalize()} Channel")
+        plt.legend()
 
     plt.tight_layout()
     plt.show()

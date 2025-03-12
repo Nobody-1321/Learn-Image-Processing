@@ -6,6 +6,20 @@ La conversión de una imagen en color a escala de grises es un proceso fundament
 En este articulo, se describe el proceso de conversión a escala de grises de una imagen.
 1. **Método de OpenCV**: Utiliza la función `cv.cvtColor` con el parámetro `cv.COLOR_BGR2GRAY`.
 2. **Método Personalizado**: Implementa la fórmula de luminosidad manualmente en la función `BgrToGray`.
+
+```python
+def BgrToGray(img):
+
+    img = img.astype(np.float32)
+
+    blue, green, red = cv.split(img)
+    
+    gray_img = 0.299 * red + 0.587 * green + 0.114 * blue
+    
+    gray_img = np.clip(gray_img, 0, 255)
+
+    return gray_img.astype(np.uint8)   
+```
 3. **Programa de referencia**: `gray_sacle.py`.
 
 ---

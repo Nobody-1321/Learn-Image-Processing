@@ -1,53 +1,68 @@
 import cv2 as cv
 import numpy as np
-import lip
+import lip 
 
-# Variables globales
-constante = 1
-valor_a = 0
-valor_b = 0
+# Global variables
+constant = 1
+value_a = 0
+value_b = 0
 
 def update_image(*args):
     """
-    Actualiza la imagen combinando los valores de todas las barras deslizantes.
+    Updates the displayed image by applying the transformations based on the 
+    current values of the trackbars.
+
+    The transformation follows the equation:
+        output_image = (constant * input_image) - value_a + value_b
+
+    The result is clipped to the range [0, 255] to ensure valid pixel values.
     """
-    global img, imgCopy, constante, valor_a, valor_b
+    global img, imgCopy, constant, value_a, value_b
 
-    # Obtener los valores actuales de las barras
-    constante = cv.getTrackbarPos('Constante', 'ImgCopy')
-    valor_a = cv.getTrackbarPos('Valor A', 'ImgCopy')
-    valor_b = cv.getTrackbarPos('Valor B', 'ImgCopy')
+    # Get the current values from the trackbars
+    constant = cv.getTrackbarPos('Constant', 'ImgCopy')
+    value_a = cv.getTrackbarPos('Value A', 'ImgCopy')
+    value_b = cv.getTrackbarPos('Value B', 'ImgCopy')
 
-    # Operaciones combinadas
-    img_temp = (constante * img.astype(np.int16)) - valor_a + valor_b
-    img_temp = np.clip(img_temp, 0, 255)  # Limitar entre 0 y 255
+    # Apply the transformation
+    img_temp = (constant * img.astype(np.int16)) - value_a + value_b
+    img_temp = np.clip(img_temp, 0, 255)  # Ensure pixel values stay within [0, 255]
     imgCopy = img_temp.astype(np.uint8)
 
-    # Mostrar la imagen actualizada
+    # Display the updated image
     cv.imshow('ImgCopy', imgCopy)
 
 def main():
+    """
+    Loads an image in grayscale, initializes a copy, and creates an interactive
+    window with trackbars to adjust the transformation parameters.
+    """
     global img, imgCopy
 
-    # Cargar la imagen
-    img = cv.imread("img_data/astro.jpg",cv.IMREAD_GRAYSCALE)
+    # Load the image in grayscale
+    img = cv.imread("img_data/white_monta.jpg")
+    img = lip.BgrToGray(img)
 
-    # Copia inicial de la imagen
+    if img is None:
+        print("Error: Unable to load image. Check the file path.")
+        return
+
+    # Create an initial copy of the image
     imgCopy = img.copy()
 
-    # Crear ventana
+    # Create a window
     cv.namedWindow('ImgCopy', cv.WINDOW_NORMAL)
     cv.resizeWindow('ImgCopy', 800, 600)
 
-    # Crear barras deslizantes
-    cv.createTrackbar('Valor A', 'ImgCopy', 0, 255, update_image)
-    cv.createTrackbar('Valor B', 'ImgCopy', 0, 255, update_image)
-    cv.createTrackbar('Constante', 'ImgCopy', 1, 5, update_image)  # Rango pequeño para evitar valores grandes
+    # Create trackbars
+    cv.createTrackbar('Value A', 'ImgCopy', 0, 255, update_image)
+    cv.createTrackbar('Value B', 'ImgCopy', 0, 255, update_image)
+    cv.createTrackbar('Constant', 'ImgCopy', 1, 5, update_image)  # Small range to prevent extreme values
 
-    # Actualización inicial
+    # Initial update to show the original image
     update_image()
 
-    # Esperar a que el usuario cierre la ventana
+    # Wait for user interaction
     cv.waitKey(0)
     cv.destroyAllWindows()
 
