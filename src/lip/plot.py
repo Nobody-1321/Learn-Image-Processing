@@ -266,7 +266,7 @@ def plot_two_images_and_histograms(img1, img2, title1="Imagen 1", title2="Imagen
     plt.axis("off")
 
     plt.subplot(2, 2, 2)
-    plt.title(f"Histograma {title1}")
+    plt.title(f"Histogram {title1}")
     if len(img1.shape) == 2:  # Imagen en escala de grises
         plt.hist(img1.flatten(), bins=256, range=[0, 256], color='black')
     else:  # Imagen en color
@@ -286,7 +286,7 @@ def plot_two_images_and_histograms(img1, img2, title1="Imagen 1", title2="Imagen
     plt.axis("off")
 
     plt.subplot(2, 2, 4)
-    plt.title(f"Histograma {title2}")
+    plt.title(f"Histogram {title2}")
     if len(img2.shape) == 2:  # Imagen en escala de grises
         plt.hist(img2.flatten(), bins=256, range=[0, 256], color='black')
     else:  # Imagen en color

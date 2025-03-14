@@ -249,20 +249,20 @@ def HistogramMatchingRGB(img_ref, img_target):
 
     return img_matched
 
-def CalHistogram(img):
+def CalHistogram(channel):
     
     """
-    Compute the histogram of one-channel grayscale image.
+    Compute the histogram of one-channel image.
 
     Parameters:
-        img (numpy.ndarray): The input grayscale image.
+        channel (numpy.ndarray): The input channel image.
 
     Returns:
         numpy.ndarray: The computed histogram with 256 bins.
     """
     # Compute the histogram
 
-    hist, bins = np.histogram(img.flatten(), bins=256, range=[0, 256])
+    hist, bins = np.histogram(channel.flatten(), bins=256, range=[0, 256])
     
     return hist
 
@@ -384,6 +384,39 @@ def HistogramEqualizationClahe(image, clip_limit=10, grid_size=(8, 8)):
             output[y, x] = int(np.round(pixel_val))
     
     return output
+
+
+def HistogramEqualizationClaheRGB(image, clip_limit=10, grid_size=(8, 8)):
+    """
+    Applies CLAHE (Contrast Limited Adaptive Histogram Equalization) to an RGB image.
+    
+    Parameters:
+        image: uint8 numpy array of shape (height, width, 3) representing an RGB image.
+        clip_limit: Maximum allowed value for each histogram bin.
+        grid_size: Tuple (n_rows, n_cols) indicating the number of regions the image is divided into.
+        
+    Returns:
+        equalized_image: uint8 numpy array of the resulting image with enhanced contrast.
+    """
+    # Convert image to LAB color space
+    lab_image = cv.cvtColor(image, cv.COLOR_RGB2LAB)
+    
+    # Extract the L channel (brightness)
+    l_channel, a_channel, b_channel = cv.split(lab_image)
+    
+    # Apply CLAHE to the L channel
+    clahe = HistogramEqualizationClahe(l_channel, clip_limit, grid_size)
+    #l_channel_eq = clahe.apply(l_channel)
+    l_channel_eq = clahe
+    
+    # Merge the modified L channel back with A and B channels
+    lab_eq = cv.merge((l_channel_eq, a_channel, b_channel))
+    
+    # Convert the image back to RGB color space
+    equalized_image = cv.cvtColor(lab_eq, cv.COLOR_LAB2RGB)
+    
+    return equalized_image
+
 
 def BgrToGray(img):
     """

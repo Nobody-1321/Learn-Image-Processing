@@ -19,4 +19,4 @@ if __name__ == "__main__":
     # Aplicar CLAHE
     img_equ = lip.HistogramEqualization(img)
     img_clahe = lip.HistogramEqualizationClahe(img, clip_limit=75, grid_size=(13, 13))
-    lip.plot_two_images_and_histograms(img_equ, img_clahe, "Equalized Image", "CLAHE Image")
+    

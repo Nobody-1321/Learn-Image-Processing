@@ -30,10 +30,12 @@ def HistogramEqualization(img):
 
     # Compute the cumulative distribution function (CDF)
     cdf = hist.cumsum()
+
     cdf_normalized = cdf / cdf[-1]  # Normalize CDF to range from 0 to 1
 
     # Map original values to new values using the CDF
     cdf_scaled = (cdf_normalized * 255).astype(np.uint8)  # Scale to [0, 255]
+
     img_equalized = cdf_scaled[img]  # Apply transformation using lookup table
 
     return img_equalized
@@ -62,8 +64,6 @@ La imagen ecualizada tiene un **mejor contraste**, permitiendo distinguir más d
 - No considera la **distribución espacial** de los píxeles, lo que puede generar efectos no naturales en algunas imágenes.  
 
 Para solucionar estos problemas, se pueden usar variantes como la **ecualización adaptativa del histograma (CLAHE)**, que aplica la técnica en regiones más pequeñas de la imagen.
-
-Claro, te ayudo a redactar una entrada detallada para la wiki de tu repositorio sobre el algoritmo **CLAHE** (Contrast Limited Adaptive Histogram Equalization). Aquí tienes un ejemplo:
 
 ---
 
