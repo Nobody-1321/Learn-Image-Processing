@@ -103,8 +103,9 @@ def enhance_image(image):
 # Prueba con una imagen de ejemplo
 #image = cv2.imread("img_data/lowlight.jpg")  # Cambiar por la imagen real
 image = cv2.imread("img_data/blue_dark.jpg")  # Cambiar por la imagen real
+image = cv2.imread("img_data/input.jpg")  # Cambiar por la imagen real
 
-image = cv2.resize(image, (640, 480))  # Redimensionar para visualización
+#image = cv2.resize(image, (640, 480))  # Redimensionar para visualización
 if image is not None:
     enhanced_image = enhance_image(image)
     cv2.imwrite("enhanced_example1.jpg", enhanced_image)

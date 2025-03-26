@@ -57,6 +57,7 @@ def weighted_guided_filter(I, p, r, eps, W):
 
 # Cargar imagen en escala de grises
 image = cv2.imread('img_data/salt_papper.png', cv2.IMREAD_GRAYSCALE)
+image = cv2.imread('img_data/input.png', cv2.IMREAD_GRAYSCALE)
 
 grad_x, grad_y, grad_magnitude = lip.SobelOperator(image)
 

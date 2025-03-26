@@ -5,9 +5,9 @@ import lip
 
 def main():
     # Leer la imagen en escala de grises
-    img = cv.imread("img_data/Moises.jpg", cv.IMREAD_GRAYSCALE)
+    #img = cv.imread("img_data/Moises.jpg", cv.IMREAD_GRAYSCALE)
     #img = cv.imread("img_data/white_monta.jpg", cv.IMREAD_GRAYSCALE)
-    #img = cv.imread("img_data/ciervo.jpg")
+    img = cv.imread("img_data/ciervo.jpg")
     #img = cv.imread("img_data/noct.jpeg", cv.IMREAD_GRAYSCALE)
     #img = cv.imread("img_data/Rose.jpg", cv.IMREAD_GRAYSCALE)
     #img = cv.imread("img_data/compressed.jpeg", cv.IMREAD_GRAYSCALE)

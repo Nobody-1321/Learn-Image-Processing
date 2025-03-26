@@ -8,7 +8,6 @@ def main():
     img = cv.resize(img, (800, 600))
 
     threshold = lip.OtsuThreshold(img)
-    print(threshold)
 
     # Aplicar umbralización
     _, img_threshold = cv.threshold(img, threshold, 255, cv.THRESH_BINARY)

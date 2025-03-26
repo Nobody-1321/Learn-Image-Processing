@@ -25,20 +25,22 @@ if __name__ == "__main__":
     # Cargar imagen binaria (0: fondo, >0: objetos)
     #img = cv.imread("img_data/caballo.webp", cv.IMREAD_GRAYSCALE)
     #img = cv.imread("img_data/astro.jpg", cv.IMREAD_GRAYSCALE)
-    img = cv.imread("img/mg.jpg", cv.IMREAD_GRAYSCALE)
+    #img = cv.imread("img_data/lena.jpg", cv.IMREAD_GRAYSCALE)
+    img = cv.imread("img_data/Rose.jpg", cv.IMREAD_GRAYSCALE)
+    #img = cv.imread("img_data/pieces.jpg", cv.IMREAD_GRAYSCALE)
+    
 
     #img = cv.imread("img_data/arte.jpg", cv.IMREAD_GRAYSCALE)
-    img = cv.resize(img, (800, 800), interpolation=cv.INTER_NEAREST)
-
-    img = cv.GaussianBlur(img, (5, 5), 0)
+    img = cv.resize(img, (720, 480), interpolation=cv.INTER_NEAREST)
 
     # Binarizar la imagen
-    _, img = cv.threshold(img, 150, 255, cv.THRESH_BINARY)
+    _, img = cv.threshold(img, 50, 255, cv.THRESH_BINARY)
     # Invertir la imagen
     #img = cv.bitwise_not(img)
 
     # Aplicar Connected Components con Union-Find
-    labeled_img_4 = lip.connected_components_by_union_find(img)
+
+    labeled_img_4 = lip.ConnectedComponentsByUnionFind(img)
     labeled_img_8 = lip.connected_components_by_union_find_8_connected(img)
 
     # Normalizar para visualización en escala de grises (0-255)
@@ -50,12 +52,6 @@ if __name__ == "__main__":
 
     print("Número de componentes conexas:", np.max(labeled_img_4))
     print("Número de componentes conexas 8:", np.max(labeled_img_8))
-
-    #save matrix to file
-    np.savetxt("img_data/arte_4.txt", labeled_img_4, fmt='%d')
-    np.savetxt("img_data/arte_8.txt", labeled_img_8, fmt='%d')
-
-    lip.show_two_images_side_by_side(normalized_img_8, normalized_img_4, "Equitetada 8 vs. Etiquetada_4", "horizontal")
 
     # Aplicar color map    
     color_img_4 = apply_color_map(labeled_img_4)
@@ -77,8 +73,9 @@ if __name__ == "__main__":
     overlay_img_4 = cv.erode(overlay_img_4, kernel, iterations=1)
     overlay_img_8 = cv.erode(overlay_img_8, kernel, iterations=1)
 
-    # Mostrar las imágenes etiquetadas en color superpuestas sobre la imagen original
-    lip.show_two_images_side_by_side(normalized_img_4, overlay_img_4, "Etiquetada 4", "horizontal")
-    lip.show_two_images_side_by_side(normalized_img_8, overlay_img_8, "Etiquetada 8", "horizontal")
+    cv.imshow('4', overlay_img_4)
+    cv.imshow('8', overlay_img_8)
     cv.waitKey(0)
     cv.destroyAllWindows()
+
+    lip.show_images_together([overlay_img_8, overlay_img_4],["neighbors 8", "neighbors 4"])

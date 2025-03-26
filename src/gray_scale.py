@@ -8,7 +8,7 @@ def main():
     
     img2_cv = cv.cvtColor(img1, cv.COLOR_BGR2GRAY)
     img2_lip = lip.BgrToGray(img1)
-
+    
     lip.show_images_together([img2_cv, img2_lip],["opencv", "lip"])
 
 

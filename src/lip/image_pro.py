@@ -2,6 +2,7 @@ import cv2 as cv
 import numpy as np
 from scipy.ndimage import gaussian_filter
 from scipy.special import factorial
+from collections import deque
 
 def channels_bgr(img):
     """
@@ -289,6 +290,7 @@ def ClipHistogram(hist, clip_limit):
             break
         hist[i] += 1
         remainder -= 1
+        
     return hist
 
 def CreateMapping(hist, block_size):
@@ -304,87 +306,73 @@ def CreateMapping(hist, block_size):
     mapping = np.round((cdf - cdf_min) / float(block_size - cdf_min) * 255).astype(np.uint8)
     return mapping
 
-def HistogramEqualizationClahe(image, clip_limit=10, grid_size=(8, 8)):
+def HistogramEqualizationClaheGrayscale(image, clip_limit=10, grid_size=(8, 8)):
     """
-    Applies CLAHE (Contrast Limited Adaptive Histogram Equalization) to a grayscale image.
-    
+    Applies CLAHE (Contrast Limited Adaptive Histogram Equalization) to a grayscale image 
+    or just a single channel.
+
     Parameters:
         image: uint8 numpy array of shape (height, width).
         clip_limit: maximum allowed value for each histogram bin.
         grid_size: tuple (n_rows, n_cols) indicating how many blocks the image is divided into.
-        
+
     Returns:
         equalized_image: uint8 numpy array of the resulting image with enhanced contrast.
     """
     height, width = image.shape
     n_rows, n_cols = grid_size
+    cell_h, cell_w = height // n_rows, width // n_cols
 
-    # Size of each block (assuming integer division; the last block may be slightly larger)
-    cell_h = height // n_rows
-    cell_w = width // n_cols
+    # Compute histogram mappings for each block
+    mappings = ComputeMappings(image, n_rows, n_cols, cell_h, cell_w, clip_limit)
 
-    # Generate the mapping table for each block
+    # Apply bilinear interpolation to construct the output image
+    return ApplyInterpolation(image, mappings, n_rows, n_cols, cell_h, cell_w)
+
+def ComputeMappings(image, n_rows, n_cols, cell_h, cell_w, clip_limit):
+    """Computes histogram equalization mappings for each block."""
     mappings = [[None for _ in range(n_cols)] for _ in range(n_rows)]
+
     for i in range(n_rows):
         for j in range(n_cols):
-            r0 = i * cell_h
-            r1 = (i + 1) * cell_h if i < n_rows - 1 else height
-            c0 = j * cell_w
-            c1 = (j + 1) * cell_w if j < n_cols - 1 else width
-            
+            r0, r1 = i * cell_h, min((i + 1) * cell_h, image.shape[0])
+            c0, c1 = j * cell_w, min((j + 1) * cell_w, image.shape[1])
+
             block = image[r0:r1, c0:c1]
             hist = CalHistogram(block)
             hist_clipped = ClipHistogram(hist, clip_limit)
-            mapping = CreateMapping(hist_clipped, block.size)
-            mappings[i][j] = mapping
+            mappings[i][j] = CreateMapping(hist_clipped, block.size)
 
-    # Create the output image
+    return mappings
+
+def ApplyInterpolation(image, mappings, n_rows, n_cols, cell_h, cell_w):
+    """Applies bilinear interpolation to map pixel intensities using CLAHE mappings."""
+    height, width = image.shape
     output = np.zeros_like(image, dtype=np.uint8)
-    
-    # Apply bilinear interpolation for each pixel using the 4 neighboring mappings
+
     for y in range(height):
-        i_f = (y + 0.5) / cell_h - 0.5
-        i0 = int(np.floor(i_f))
-        i1 = i0 + 1
-        y_weight = i_f - i0
-        
-        if i0 < 0:
-            i0 = 0
-            i1 = 0
-            y_weight = 0
-        elif i1 >= n_rows:
-            i1 = n_rows - 1
-            i0 = n_rows - 1
-            y_weight = 0
+        i0, i1, y_weight = InterpolationIndices(y, cell_h, n_rows)
         
         for x in range(width):
-            j_f = (x + 0.5) / cell_w - 0.5
-            j0 = int(np.floor(j_f))
-            j1 = j0 + 1
-            x_weight = j_f - j0
+            j0, j1, x_weight = InterpolationIndices(x, cell_w, n_cols)
             
-            if j0 < 0:
-                j0 = 0
-                j1 = 0
-                x_weight = 0
-            elif j1 >= n_cols:
-                j1 = n_cols - 1
-                j0 = n_cols - 1
-                x_weight = 0
-
             intensity = image[y, x]
-            val_tl = mappings[i0][j0][intensity]
-            val_tr = mappings[i0][j1][intensity]
-            val_bl = mappings[i1][j0][intensity]
-            val_br = mappings[i1][j1][intensity]
-            
+            val_tl, val_tr = mappings[i0][j0][intensity], mappings[i0][j1][intensity]
+            val_bl, val_br = mappings[i1][j0][intensity], mappings[i1][j1][intensity]
+
             top = val_tl * (1 - x_weight) + val_tr * x_weight
             bottom = val_bl * (1 - x_weight) + val_br * x_weight
-            pixel_val = top * (1 - y_weight) + bottom * y_weight
-            output[y, x] = int(np.round(pixel_val))
-    
+            output[y, x] = int(np.round(top * (1 - y_weight) + bottom * y_weight))
+
     return output
 
+def InterpolationIndices(coord, cell_size, max_index):
+    """Computes interpolation indices and weights for bilinear interpolation."""
+    f = (coord + 0.5) / cell_size - 0.5
+    i0 = int(np.floor(f))
+    i1 = min(i0 + 1, max_index - 1)
+    weight = f - i0 if 0 <= i0 < max_index - 1 else 0
+    return max(0, i0), i1, weight
 
 def HistogramEqualizationClaheRGB(image, clip_limit=10, grid_size=(8, 8)):
     """
@@ -405,7 +393,7 @@ def HistogramEqualizationClaheRGB(image, clip_limit=10, grid_size=(8, 8)):
     l_channel, a_channel, b_channel = cv.split(lab_image)
     
     # Apply CLAHE to the L channel
-    clahe = HistogramEqualizationClahe(l_channel, clip_limit, grid_size)
+    clahe = HistogramEqualizationClaheGrayscale(l_channel, clip_limit, grid_size)
     #l_channel_eq = clahe.apply(l_channel)
     l_channel_eq = clahe
     
@@ -417,6 +405,39 @@ def HistogramEqualizationClaheRGB(image, clip_limit=10, grid_size=(8, 8)):
     
     return equalized_image
 
+def ImageNegative(img):
+    """
+    Compute the negative of an image by subtracting each pixel value from 255.
+
+    Parameters:
+        img (numpy.ndarray): Input image.
+
+    Returns:
+        numpy.ndarray: Negative of the input image.
+    """
+
+    return 255 - img
+
+def GammaCorrection(image, gamma, intensity_levels=256):
+    """
+    Applies gamma correction to a grayscale image.
+
+    Parameters:
+        image: uint8 numpy array of shape (height, width).
+        gamma: Gamma value for correction (gamma > 1 darkens, gamma < 1 brightens).
+        intensity_levels: Number of intensity levels (default is 256 for 8-bit images).
+
+    Returns:
+        corrected_image: uint8 numpy array with gamma correction applied.
+    """
+    # Normalizar intensidades al rango [0,1]
+    normalized = image / (intensity_levels - 1)
+    
+    # Aplicar transformación gamma: s = (r ^ gamma) * (L - 1)
+    corrected = (normalized ** gamma) * (intensity_levels - 1)
+    
+    # Convertir de nuevo a uint8
+    return corrected.astype(np.uint8)
 
 def BgrToGray(img):
     """
@@ -531,45 +552,160 @@ def show_two_images(img1, img2, title="Comparison", orientation="horizontal"):
     # Display the combined image
     cv.imshow(title, combined)
 
+def fast_floodfill_dfs(img, seed, new_color):
+    """
+    Flood Fill Algorithm using Depth-First Search (DFS).
+
+    Parameters:
+    - img: np.ndarray -> A grayscale or binary image (pixel matrix).
+    - seed: tuple -> Coordinates (x, y) of the seed pixel.
+    - new_color: int -> The color that the connected region will be filled with.
+
+    This function modifies the original image by changing the color of the region connected to the seed pixel.
+    """
+    
+    x, y = seed
+    orig_color = img[y, x]  # Get the original color of the seed pixel
+    
+    if orig_color == new_color:
+        return  # If the pixel already has the new color, do nothing
+
+    frontier = [seed]  # Initialize the stack with the seed pixel
+    img[y, x] = new_color  # Color the seed pixel with the new color
+
+    # Directions to explore the 4 neighbors (right, left, down, up)
+    directions = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+
+    while frontier:
+        cx, cy = frontier.pop()  # Pop the last pixel from the stack (LIFO)
+
+        for dx, dy in directions:
+            nx, ny = cx + dx, cy + dy  # Coordinates of the neighbor
+
+            # Check if the neighbor is within bounds and has the original color
+            if 0 <= nx < img.shape[1] and 0 <= ny < img.shape[0] and img[ny, nx] == orig_color:
+                frontier.append((nx, ny))  # Add the neighbor to the stack
+                img[ny, nx] = new_color  # Change its color
+
+                # Visualize the process (optional)
+                cv.imshow('Flood Fill', img)
+                cv.waitKey(1)
+
+def floodfill_bfs(img: np.ndarray, seed: tuple, new_color: int):
+    """
+    Flood Fill algorithm using Breadth-First Search (BFS).
+    
+    Parameters:
+    - img: np.ndarray -> Image in grayscale or binary (pixel matrix).
+    - seed: tuple -> Coordinates (x, y) of the seed pixel.
+    - new_color: int -> The color to fill the region with.
+    
+    Modifies the original image by replacing the connected region starting from the seed pixel.
+    """
+    
+    x, y = seed
+    orig_color = img[y, x]  # Get the original color of the seed pixel
+    
+    if orig_color == new_color:
+        return  # If the seed already has the new color, do nothing
+    
+    queue = deque([(x, y)])  # Initialize the queue with the seed pixel
+    img[y, x] = new_color  # Color the seed pixel with the new color
+
+    # Directions to explore the 4 neighbors (right, left, down, up)
+    directions = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+
+    while queue:
+        cx, cy = queue.popleft()  # Pop the first pixel from the queue (FIFO)
+
+        for dx, dy in directions:
+            nx, ny = cx + dx, cy + dy  # Coordinates of the neighbor
+
+            # Check if the neighbor is within the image bounds and has the original color
+            if 0 <= nx < img.shape[1] and 0 <= ny < img.shape[0] and img[ny, nx] == orig_color:
+                queue.append((nx, ny))  # Add the neighbor to the queue
+                img[ny, nx] = new_color  # Change its color
+
+                 #Visualization of the process (optional)
+                cv.imshow('Flood Fill BFS', img)
+                cv.waitKey(1)
+
 class UnionFind:
-    """Estructura de datos Union-Find con compresión de caminos."""
+    """
+    Union-Find data structure with path compression.
+    
+    This structure efficiently manages disjoint sets, commonly used for connected component labeling.
+    It supports two main operations:
+    - `find(x)`: Finds the representative (root) of the set containing `x`, applying path compression.
+    - `union(x, y)`: Merges the sets containing `x` and `y`, maintaining a hierarchical structure.
+    """
     def __init__(self, size):
-        self.parent = np.arange(size)
+        """
+        Initializes the Union-Find structure.
+        
+        Parameters:
+        size (int): The total number of elements (typically the number of pixels in the image).
+        """
+        self.parent = np.arange(size)  # Each element starts as its own parent
     
     def find(self, x):
+        """
+        Finds the representative element (root) of the set containing `x`, applying path compression.
+        
+        Parameters:
+        x (int): The element whose root is being searched.
+
+        Returns:
+        int: The root of the set containing `x`.
+        """
         if self.parent[x] != x:
-            self.parent[x] = self.find(self.parent[x])  # Compresión de caminos
+            self.parent[x] = self.find(self.parent[x])  # Path compression for efficiency
         return self.parent[x]
     
     def union(self, x, y):
+        """
+        Merges the sets containing `x` and `y` by linking their roots.
+
+        Parameters:
+        x (int): An element from the first set.
+        y (int): An element from the second set.
+        """
         root_x = self.find(x)
         root_y = self.find(y)
         if root_x != root_y:
-            self.parent[root_y] = root_x
+            self.parent[root_y] = root_x  # Attach root_y to root_x
 
-def connected_components_by_union_find(image):
+def ConnectedComponentsByUnionFind(image):
     """
-    Perform connected components labeling on a binary image using the Union-Find algorithm.
+    Performs connected components labeling on a binary image using the Union-Find algorithm.
+    
+    This method assigns unique labels to connected regions in a binary image. It follows a 
+    two-pass approach: the first pass assigns preliminary labels and records equivalences, 
+    while the second pass resolves these equivalences using the Union-Find structure.
+
     Parameters:
-    image (numpy.ndarray): A 2D binary image where foreground pixels are non-zero and background pixels are zero.
+    image (numpy.ndarray): A 2D binary image where non-zero pixels represent foreground objects 
+                           and zero pixels represent the background.
+
     Returns:
-    numpy.ndarray: A 2D array of the same shape as the input image, where each connected component is assigned a unique label.
+    numpy.ndarray: A 2D array of the same shape as the input image, where each connected component 
+                   is assigned a unique integer label.
     """
     height, width = image.shape
-    label_image = np.zeros((height, width), dtype=int)
-    uf = UnionFind(height * width)  # Estructura para uniones
-    next_label = 1
+    label_image = np.zeros((height, width), dtype=int)  # Output label array
+    uf = UnionFind(height * width)  # Union-Find structure for label merging
+    next_label = 1  # Initial label counter
 
-    # Primera pasada: Asignación preliminar y registro de equivalencias
+    # First pass: Preliminary labeling and equivalence registration
     for y in range(height):
         for x in range(width):
-            if image[y, x] == 0:  # Fondo (asumimos 0 como fondo)
+            if image[y, x] == 0:  # Skip background pixels
                 continue
             
             neighbors = []
-            if x > 0 and image[y, x] == image[y, x - 1]:  # Vecino izquierdo
+            if x > 0 and image[y, x] == image[y, x - 1]:  # Left neighbor
                 neighbors.append(label_image[y, x - 1])
-            if y > 0 and image[y, x] == image[y - 1, x]:  # Vecino superior
+            if y > 0 and image[y, x] == image[y - 1, x]:  # Upper neighbor
                 neighbors.append(label_image[y - 1, x])
             
             if neighbors:
@@ -581,9 +717,9 @@ def connected_components_by_union_find(image):
                 label_image[y, x] = next_label
                 next_label += 1
 
-    # Segunda pasada: Reetiquetar con los representantes equivalentes
+    # Second pass: Resolve equivalences and reassign final labels
     labels_flat = label_image.flatten()
-    labels_flat = np.vectorize(uf.find)(labels_flat)  # Vectorizado en NumPy
+    labels_flat = np.vectorize(uf.find)(labels_flat)  # Apply find operation across all labels
     label_image = labels_flat.reshape(height, width)
 
     return label_image
@@ -1318,8 +1454,6 @@ def RidlerCalvardThreshold(img, max_iterations=100, tolerance=1e-3):
             break
         
         T_old = T_new
-
-        print(len(G1), len(G2), mu1, mu2, T_new, T_old)
 
     return T_old
 

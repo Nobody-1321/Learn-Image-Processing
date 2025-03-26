@@ -190,7 +190,7 @@ def plot_three_images_and_histograms(img1, img2, img3, title1="Imagen 1", title2
     plt.axis("off")
 
     plt.subplot(3, 2, 2)
-    plt.title(f"Histograma {title1}")
+    plt.title(f"_ {title1}")
     if len(img1.shape) == 2:  # Imagen en escala de grises
         plt.hist(img1.flatten(), bins=256, range=[0, 256], color='black')
     else:  # Imagen en color
@@ -210,7 +210,7 @@ def plot_three_images_and_histograms(img1, img2, img3, title1="Imagen 1", title2
     plt.axis("off")
 
     plt.subplot(3, 2, 4)
-    plt.title(f"Histograma {title2}")
+    plt.title(f"_ {title2}")
     if len(img2.shape) == 2:  # Imagen en escala de grises
         plt.hist(img2.flatten(), bins=256, range=[0, 256], color='black')
     else:  # Imagen en color
@@ -230,7 +230,7 @@ def plot_three_images_and_histograms(img1, img2, img3, title1="Imagen 1", title2
     plt.axis("off")
 
     plt.subplot(3, 2, 6)
-    plt.title(f"Histograma {title3}")
+    plt.title(f"_ {title3}")
     if len(img3.shape) == 2:  # Imagen en escala de grises
         plt.hist(img3.flatten(), bins=256, range=[0, 256], color='black')
     else:  # Imagen en color

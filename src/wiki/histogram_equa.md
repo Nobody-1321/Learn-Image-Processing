@@ -73,8 +73,6 @@ Para solucionar estos problemas, se pueden usar variantes como la **ecualizació
 
 ### ¿Cómo funciona CLAHE?
 
-CLAHE mejora el contraste de la imagen adaptativamente utilizando los siguientes pasos:
-
 1. **División de la imagen en bloques**: La imagen se divide en bloques de tamaño uniforme. La cantidad de bloques está determinada por el parámetro `grid_size`, que define el número de filas y columnas en las que se divide la imagen.
 
 2. **Cálculo del histograma de cada bloque**: Para cada bloque de la imagen, se calcula el histograma de intensidades de píxeles. Este histograma describe la distribución de las intensidades en ese bloque específico.
@@ -86,6 +84,7 @@ CLAHE mejora el contraste de la imagen adaptativamente utilizando los siguientes
 5. **Interpolación bilineal entre bloques**: Para evitar bordes visibles entre bloques al recomponer la imagen, se aplica una interpolación bilineal entre los bloques. Esto suaviza las transiciones entre diferentes regiones y asegura una salida visualmente continua.
 
 6. **Combinación de bloques**: Finalmente, después de la ecualización de los bloques individuales y la interpolación, se combinan los bloques ecualizados para formar la imagen final con el contraste mejorado.
+
 
 ### Ventajas de CLAHE
 

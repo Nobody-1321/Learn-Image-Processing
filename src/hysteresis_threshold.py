@@ -22,7 +22,7 @@ def flood_fill(image, x, y, visited):
                 if 0 <= nx < w and 0 <= ny < h and not visited[ny, nx] and image[ny, nx] != 0:
                     stack.append((nx, ny))
 
-def hysteresis_threshold(image, T_low, T_high):
+def HysteresisThreshold(image, T_low, T_high):
     """ Aplica umbralización por histéresis """
     # Detectar bordes débiles y fuertes
     strong_edges = (image >= T_high).astype(np.uint8) * 255
@@ -42,11 +42,14 @@ def hysteresis_threshold(image, T_low, T_high):
     return weak_edges  # Retorna la imagen binaria con los bordes confirmados
 
 # Cargar imagen en escala de grises
-image = cv2.imread("img_data/caballo.webp", cv2.IMREAD_GRAYSCALE)
+#image = cv2.imread("img_data/caballo.webp", cv2.IMREAD_GRAYSCALE)
+#image = cv2.imread("img_data/acat.jpg", cv2.IMREAD_GRAYSCALE)
+image = cv2.imread("img_data/Rose.jpg", cv2.IMREAD_GRAYSCALE)
+
 image = cv2.resize(image, (800, 600))
 
 # Aplicar histéresis manualmente
-final_edges = hysteresis_threshold(image, 50, 150)
+final_edges = HysteresisThreshold(image, 40, 170)
 
 # Mostrar resultado
 cv2.imshow("Hysteresis Thresholding", final_edges)
