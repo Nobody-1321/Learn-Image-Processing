@@ -155,7 +155,7 @@ def get_combine_channels_rg_rb_gb(img):
     
     return red_green, red_blue, green_blue
 
-def HistogramEqualization(img):
+def HistogramEqualizationGray(img):
     """
     Apply histogram equalization to an input image.
     
@@ -178,6 +178,36 @@ def HistogramEqualization(img):
     img_equalized = cdf_scaled[img]  # Usar la CDF como lookup table
     
     return img_equalized
+
+def HistogramEqualizationRGB(image):
+    """
+    Apply histogram equalization to an RGB image by working on the luminance channel in YCrCb space.
+    
+    Parameters:
+        image (numpy.ndarray): Input RGB image as a 3D numpy array.
+    
+    Returns:
+        numpy.ndarray: Image after applying histogram equalization, with the same shape as the input image.
+    """
+    # Convertir la imagen al espacio de color YCrCb
+    ycrcb = cv.cvtColor(image, cv.COLOR_BGR2YCrCb)
+    Y, Cr, Cb = cv.split(ycrcb)
+
+    # Aplicar la equalización de histograma al canal de luminancia (Y)
+    hist, bins = np.histogram(Y.flatten(), bins=256, range=[0, 256])
+    cdf = hist.cumsum()  # Función de distribución acumulativa
+    cdf_normalized = cdf / cdf[-1]  # Normalizar el CDF para que vaya de 0 a 1
+    cdf_scaled = (cdf_normalized * 255).astype(np.uint8)  # Escalar a [0, 255]
+    Y_equalized = cdf_scaled[Y]  # Usar la CDF como tabla de búsqueda
+
+    # Reconstruir la imagen en el espacio YCrCb
+    ycrcb_equalized = cv.merge([Y_equalized, Cr, Cb])
+
+    # Convertir de vuelta al espacio de color BGR
+    image_equalized = cv.cvtColor(ycrcb_equalized, cv.COLOR_YCrCb2BGR)
+
+    return image_equalized
+
 
 def HistogramMatchingGray(img_ref, img_target):
     """
@@ -552,7 +582,7 @@ def show_two_images(img1, img2, title="Comparison", orientation="horizontal"):
     # Display the combined image
     cv.imshow(title, combined)
 
-def fast_floodfill_dfs(img, seed, new_color):
+def FloodFillDFS(img, seed, new_color):
     """
     Flood Fill Algorithm using Depth-First Search (DFS).
 
@@ -591,7 +621,7 @@ def fast_floodfill_dfs(img, seed, new_color):
                 cv.imshow('Flood Fill', img)
                 cv.waitKey(1)
 
-def floodfill_bfs(img: np.ndarray, seed: tuple, new_color: int):
+def FloodFillBFS(img: np.ndarray, seed: tuple, new_color: int):
     """
     Flood Fill algorithm using Breadth-First Search (BFS).
     
@@ -1496,3 +1526,93 @@ def OtsuThreshold(I):
             optimal_threshold = t
     
     return optimal_threshold
+
+# bihistogram equalization
+
+def BihistogramEqualizationRGB(image):
+    """
+    Applies Bi-Histogram Equalization to a color image without distorting colors.
+
+    This function enhances the contrast of an image by applying histogram equalization 
+    separately to two regions: pixels with luminance values lower than a threshold and 
+    those with higher values. The threshold is determined using Otsu's method.
+
+    Parameters:
+        image (numpy.ndarray): Input color image in BGR format.
+
+    Returns:
+        numpy.ndarray: The contrast-enhanced image in BGR format.
+    """
+    # Convert to YCrCb to work only on the luminance channel
+    ycrcb = cv.cvtColor(image, cv.COLOR_BGR2YCrCb)
+    Y, Cr, Cb = cv.split(ycrcb)
+
+    # Step 1: Compute the threshold X_T using Otsu's method
+    X_T = OtsuThreshold(Y)
+    print(X_T)
+
+    # Step 2: Separate the two histograms (below and above X_T)
+    mask_L = Y <= X_T  # Mask for the lower region
+    mask_U = Y > X_T   # Mask for the upper region
+
+    # Step 3: Compute the cumulative distribution function (CDF) for the entire luminance channel
+    hist, bins = np.histogram(Y.flatten(), bins=256, range=[0, 256])
+    cdf = hist.cumsum()  # Cumulative distribution function
+    cdf_normalized = (cdf - cdf.min()) * 255 / (cdf.max() - cdf.min())  # Normalize to [0, 255]
+    cdf_normalized = np.round(cdf_normalized).astype(np.uint8)
+
+    # Step 4: Adjust the lower and upper regions using the CDF
+    Y_eq = np.copy(Y)
+    Y_eq[mask_L] = cdf_normalized[Y[mask_L]]
+    Y_eq[mask_U] = cdf_normalized[Y[mask_U]]
+
+    # Merge Y, Cr, and Cb channels and convert back to BGR
+    result = cv.merge([Y_eq, Cr, Cb])
+    result = cv.cvtColor(result, cv.COLOR_YCrCb2BGR)
+
+    return result
+
+def BihistogramEqualizationGrayscale(image):
+    """
+    Applies Bi-Histogram Equalization to a grayscale image.
+
+    This function enhances the contrast of a grayscale image by applying histogram equalization 
+    separately to two regions: pixels with intensity values lower than a threshold and those with 
+    higher values. The threshold is determined using the median of the image.
+
+    Parameters:
+        image (numpy.ndarray): Input grayscale image.
+
+    Returns:
+        numpy.ndarray: The contrast-enhanced grayscale image.
+
+    Raises:
+        ValueError: If the input image is not in grayscale format.
+    """
+    # Validate that the image is grayscale
+    if len(image.shape) != 2:
+        raise ValueError("The input image must be in grayscale format.")
+
+    # Step 1: Compute the threshold X_T as the median of the image
+    X_T = np.median(image)
+
+    # Step 2: Separate the two histograms (below and above X_T)
+    mask_L = image <= X_T  # Mask for the lower region
+    mask_U = image > X_T   # Mask for the upper region
+
+    # Step 3: Compute the cumulative distribution function (CDF) for the entire image
+    hist, bins = np.histogram(image.flatten(), bins=256, range=[0, 256])
+    cdf = hist.cumsum()  # Cumulative distribution function
+    cdf_normalized = (cdf - cdf.min()) * 255 / (cdf.max() - cdf.min())  # Normalize to [0, 255]
+    cdf_normalized = np.round(cdf_normalized).astype(np.uint8)
+
+    # Step 4: Adjust the lower and upper regions using the CDF
+    image_eq = np.copy(image)
+    image_eq[mask_L] = cdf_normalized[image[mask_L]]
+    image_eq[mask_U] = cdf_normalized[image[mask_U]]
+
+    # Ensure values are within the range [0, 255]
+    image_eq = np.clip(image_eq, 0, 255).astype(np.uint8)
+
+    return image_eq
+
