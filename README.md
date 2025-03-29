@@ -36,10 +36,6 @@ If you want to dive deeper into image processing, here are some great books, web
 
 
 ### 📄 Research Papers  
-- Otsu, N. (1979). *A Threshold Selection Method from Gray-Level Histograms.* IEEE Transactions on Systems, Man, and Cybernetics, 9(1), 62-66.  
-- He, K., Sun, J., & Tang, X. (2013). *Guided Image Filtering.* IEEE Transactions on Pattern Analysis and Machine Intelligence, 35(6), 1397-1409.  
-- Viola, P., & Jones, M. (2001). *Rapid Object Detection Using a Boosted Cascade of Simple Features.* Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR).  
-
 ---
 
 ## Development Status  
