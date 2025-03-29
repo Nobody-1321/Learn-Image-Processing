@@ -111,3 +111,39 @@ def show_images_together(images, titles=None):
     cv.imshow("Combined Image", combined_image)
     cv.waitKey(0)
     cv.destroyAllWindows()
+
+def show_two_images(img1, img2, title="Comparison", orientation="horizontal"):
+    """
+    Displays two images side by side in a single window using OpenCV.
+    
+    Parameters:
+    - img1: First image (numpy array).
+    - img2: Second image (numpy array).
+    - title: Title of the window.
+    - orientation: "horizontal" (default) or "vertical".
+    """
+    # Ensure both images have the same number of channels
+    if len(img1.shape) == 2:  # If grayscale, convert to 3 channels
+        img1 = cv.cvtColor(img1, cv.COLOR_GRAY2BGR)
+    if len(img2.shape) == 2:
+        img2 = cv.cvtColor(img2, cv.COLOR_GRAY2BGR)
+
+    # Resize the smaller image to match the size
+    h1, w1 = img1.shape[:2]
+    h2, w2 = img2.shape[:2]
+
+    if orientation == "horizontal":
+        if h1 != h2:
+            max_h = max(h1, h2)
+            img1 = cv.resize(img1, (w1, max_h))
+            img2 = cv.resize(img2, (w2, max_h))
+        combined = np.hstack((img1, img2))  # Stack horizontally
+    else:
+        if w1 != w2:
+            max_w = max(w1, w2)
+            img1 = cv.resize(img1, (max_w, h1))
+            img2 = cv.resize(img2, (max_w, h2))
+        combined = np.vstack((img1, img2))  # Stack vertically
+
+    # Display the combined image
+    cv.imshow(title, combined)

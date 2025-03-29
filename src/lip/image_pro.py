@@ -155,6 +155,114 @@ def get_combine_channels_rg_rb_gb(img):
     
     return red_green, red_blue, green_blue
 
+#  -----------------------------
+#                             
+#    Image Processing          
+#    Histogram Functions      
+#                              
+#  -----------------------------
+
+def CalHistogram(channel):
+    
+    """
+    Compute the histogram of one-channel image.
+
+    Parameters:
+        channel (numpy.ndarray): The input channel image.
+
+    Returns:
+        numpy.ndarray: The computed histogram with 256 bins.
+    """
+    # Compute the histogram
+
+    hist, bins = np.histogram(channel.flatten(), bins=256, range=[0, 256])
+    
+    return hist
+
+def ClipHistogram(hist, clip_limit):
+    """
+    Clips the histogram by limiting each bin to the clip_limit and redistributes
+    the clipped amount uniformly among all the bins.
+    """
+    excess = hist - clip_limit
+    excess[excess < 0] = 0
+    total_excess = np.sum(excess)
+    
+    # Clip the histogram
+    hist = np.minimum(hist, clip_limit)
+    
+    # Redistribute the excess uniformly
+    redist = total_excess // 256
+    hist = hist + redist
+    
+    # Distribute the remainder sequentially
+    remainder = total_excess % 256
+    for i in range(256):
+        if remainder <= 0:
+            break
+        hist[i] += 1
+        remainder -= 1
+        
+    return hist
+
+def CreateMapping(hist, block_size):
+    """
+    Calculates the mapping function (lookup table) from the clipped histogram
+    using the cumulative distribution function (CDF).
+    """
+    cdf = np.cumsum(hist)
+    # Avoid division by zero: find the first non-zero value
+    cdf_min = cdf[np.nonzero(cdf)][0]
+    
+    # Normalize the CDF to [0, 255]
+    mapping = np.round((cdf - cdf_min) / float(block_size - cdf_min) * 255).astype(np.uint8)
+    return mapping
+
+def ComputeMappings(image, n_rows, n_cols, cell_h, cell_w, clip_limit):
+    """Computes histogram equalization mappings for each block."""
+    mappings = [[None for _ in range(n_cols)] for _ in range(n_rows)]
+
+    for i in range(n_rows):
+        for j in range(n_cols):
+            r0, r1 = i * cell_h, min((i + 1) * cell_h, image.shape[0])
+            c0, c1 = j * cell_w, min((j + 1) * cell_w, image.shape[1])
+
+            block = image[r0:r1, c0:c1]
+            hist = CalHistogram(block)
+            hist_clipped = ClipHistogram(hist, clip_limit)
+            mappings[i][j] = CreateMapping(hist_clipped, block.size)
+
+    return mappings
+
+def ApplyInterpolation(image, mappings, n_rows, n_cols, cell_h, cell_w):
+    """Applies bilinear interpolation to map pixel intensities using CLAHE mappings."""
+    height, width = image.shape
+    output = np.zeros_like(image, dtype=np.uint8)
+
+    for y in range(height):
+        i0, i1, y_weight = InterpolationIndices(y, cell_h, n_rows)
+        
+        for x in range(width):
+            j0, j1, x_weight = InterpolationIndices(x, cell_w, n_cols)
+            
+            intensity = image[y, x]
+            val_tl, val_tr = mappings[i0][j0][intensity], mappings[i0][j1][intensity]
+            val_bl, val_br = mappings[i1][j0][intensity], mappings[i1][j1][intensity]
+
+            top = val_tl * (1 - x_weight) + val_tr * x_weight
+            bottom = val_bl * (1 - x_weight) + val_br * x_weight
+            output[y, x] = int(np.round(top * (1 - y_weight) + bottom * y_weight))
+
+    return output
+
+def InterpolationIndices(coord, cell_size, max_index):
+    """Computes interpolation indices and weights for bilinear interpolation."""
+    f = (coord + 0.5) / cell_size - 0.5
+    i0 = int(np.floor(f))
+    i1 = min(i0 + 1, max_index - 1)
+    weight = f - i0 if 0 <= i0 < max_index - 1 else 0
+    return max(0, i0), i1, weight
+
 def HistogramEqualizationGray(img):
     """
     Apply histogram equalization to an input image.
@@ -207,7 +315,6 @@ def HistogramEqualizationRGB(image):
     image_equalized = cv.cvtColor(ycrcb_equalized, cv.COLOR_YCrCb2BGR)
 
     return image_equalized
-
 
 def HistogramMatchingGray(img_ref, img_target):
     """
@@ -280,62 +387,6 @@ def HistogramMatchingRGB(img_ref, img_target):
 
     return img_matched
 
-def CalHistogram(channel):
-    
-    """
-    Compute the histogram of one-channel image.
-
-    Parameters:
-        channel (numpy.ndarray): The input channel image.
-
-    Returns:
-        numpy.ndarray: The computed histogram with 256 bins.
-    """
-    # Compute the histogram
-
-    hist, bins = np.histogram(channel.flatten(), bins=256, range=[0, 256])
-    
-    return hist
-
-def ClipHistogram(hist, clip_limit):
-    """
-    Clips the histogram by limiting each bin to the clip_limit and redistributes
-    the clipped amount uniformly among all the bins.
-    """
-    excess = hist - clip_limit
-    excess[excess < 0] = 0
-    total_excess = np.sum(excess)
-    
-    # Clip the histogram
-    hist = np.minimum(hist, clip_limit)
-    
-    # Redistribute the excess uniformly
-    redist = total_excess // 256
-    hist = hist + redist
-    
-    # Distribute the remainder sequentially
-    remainder = total_excess % 256
-    for i in range(256):
-        if remainder <= 0:
-            break
-        hist[i] += 1
-        remainder -= 1
-        
-    return hist
-
-def CreateMapping(hist, block_size):
-    """
-    Calculates the mapping function (lookup table) from the clipped histogram
-    using the cumulative distribution function (CDF).
-    """
-    cdf = np.cumsum(hist)
-    # Avoid division by zero: find the first non-zero value
-    cdf_min = cdf[np.nonzero(cdf)][0]
-    
-    # Normalize the CDF to [0, 255]
-    mapping = np.round((cdf - cdf_min) / float(block_size - cdf_min) * 255).astype(np.uint8)
-    return mapping
-
 def HistogramEqualizationClaheGrayscale(image, clip_limit=10, grid_size=(8, 8)):
     """
     Applies CLAHE (Contrast Limited Adaptive Histogram Equalization) to a grayscale image 
@@ -358,51 +409,6 @@ def HistogramEqualizationClaheGrayscale(image, clip_limit=10, grid_size=(8, 8)):
 
     # Apply bilinear interpolation to construct the output image
     return ApplyInterpolation(image, mappings, n_rows, n_cols, cell_h, cell_w)
-
-def ComputeMappings(image, n_rows, n_cols, cell_h, cell_w, clip_limit):
-    """Computes histogram equalization mappings for each block."""
-    mappings = [[None for _ in range(n_cols)] for _ in range(n_rows)]
-
-    for i in range(n_rows):
-        for j in range(n_cols):
-            r0, r1 = i * cell_h, min((i + 1) * cell_h, image.shape[0])
-            c0, c1 = j * cell_w, min((j + 1) * cell_w, image.shape[1])
-
-            block = image[r0:r1, c0:c1]
-            hist = CalHistogram(block)
-            hist_clipped = ClipHistogram(hist, clip_limit)
-            mappings[i][j] = CreateMapping(hist_clipped, block.size)
-
-    return mappings
-
-def ApplyInterpolation(image, mappings, n_rows, n_cols, cell_h, cell_w):
-    """Applies bilinear interpolation to map pixel intensities using CLAHE mappings."""
-    height, width = image.shape
-    output = np.zeros_like(image, dtype=np.uint8)
-
-    for y in range(height):
-        i0, i1, y_weight = InterpolationIndices(y, cell_h, n_rows)
-        
-        for x in range(width):
-            j0, j1, x_weight = InterpolationIndices(x, cell_w, n_cols)
-            
-            intensity = image[y, x]
-            val_tl, val_tr = mappings[i0][j0][intensity], mappings[i0][j1][intensity]
-            val_bl, val_br = mappings[i1][j0][intensity], mappings[i1][j1][intensity]
-
-            top = val_tl * (1 - x_weight) + val_tr * x_weight
-            bottom = val_bl * (1 - x_weight) + val_br * x_weight
-            output[y, x] = int(np.round(top * (1 - y_weight) + bottom * y_weight))
-
-    return output
-
-def InterpolationIndices(coord, cell_size, max_index):
-    """Computes interpolation indices and weights for bilinear interpolation."""
-    f = (coord + 0.5) / cell_size - 0.5
-    i0 = int(np.floor(f))
-    i1 = min(i0 + 1, max_index - 1)
-    weight = f - i0 if 0 <= i0 < max_index - 1 else 0
-    return max(0, i0), i1, weight
 
 def HistogramEqualizationClaheRGB(image, clip_limit=10, grid_size=(8, 8)):
     """
@@ -434,6 +440,98 @@ def HistogramEqualizationClaheRGB(image, clip_limit=10, grid_size=(8, 8)):
     equalized_image = cv.cvtColor(lab_eq, cv.COLOR_LAB2RGB)
     
     return equalized_image
+
+def BihistogramEqualizationRGB(image):
+    """
+    Applies Bi-Histogram Equalization to a color image without distorting colors.
+
+    This function enhances the contrast of an image by applying histogram equalization 
+    separately to two regions: pixels with luminance values lower than a threshold and 
+    those with higher values. The threshold is determined using Otsu's method.
+
+    Parameters:
+        image (numpy.ndarray): Input color image in BGR format.
+
+    Returns:
+        numpy.ndarray: The contrast-enhanced image in BGR format.
+    """
+    # Convert to YCrCb to work only on the luminance channel
+    ycrcb = cv.cvtColor(image, cv.COLOR_BGR2YCrCb)
+    Y, Cr, Cb = cv.split(ycrcb)
+
+    # Step 1: Compute the threshold X_T using Otsu's method
+    X_T = OtsuThreshold(Y)
+    print(X_T)
+
+    # Step 2: Separate the two histograms (below and above X_T)
+    mask_L = Y <= X_T  # Mask for the lower region
+    mask_U = Y > X_T   # Mask for the upper region
+
+    # Step 3: Compute the cumulative distribution function (CDF) for the entire luminance channel
+    hist, bins = np.histogram(Y.flatten(), bins=256, range=[0, 256])
+    cdf = hist.cumsum()  # Cumulative distribution function
+    cdf_normalized = (cdf - cdf.min()) * 255 / (cdf.max() - cdf.min())  # Normalize to [0, 255]
+    cdf_normalized = np.round(cdf_normalized).astype(np.uint8)
+
+    # Step 4: Adjust the lower and upper regions using the CDF
+    Y_eq = np.copy(Y)
+    Y_eq[mask_L] = cdf_normalized[Y[mask_L]]
+    Y_eq[mask_U] = cdf_normalized[Y[mask_U]]
+
+    # Merge Y, Cr, and Cb channels and convert back to BGR
+    result = cv.merge([Y_eq, Cr, Cb])
+    result = cv.cvtColor(result, cv.COLOR_YCrCb2BGR)
+
+    return result
+
+def BihistogramEqualizationGrayscale(image):
+    """
+    Applies Bi-Histogram Equalization to a grayscale image.
+
+    This function enhances the contrast of a grayscale image by applying histogram equalization 
+    separately to two regions: pixels with intensity values lower than a threshold and those with 
+    higher values. The threshold is determined using the median of the image.
+
+    Parameters:
+        image (numpy.ndarray): Input grayscale image.
+
+    Returns:
+        numpy.ndarray: The contrast-enhanced grayscale image.
+
+    Raises:
+        ValueError: If the input image is not in grayscale format.
+    """
+    # Validate that the image is grayscale
+    if len(image.shape) != 2:
+        raise ValueError("The input image must be in grayscale format.")
+
+    # Step 1: Compute the threshold X_T as the median of the image
+    X_T = np.median(image)
+
+    # Step 2: Separate the two histograms (below and above X_T)
+    mask_L = image <= X_T  # Mask for the lower region
+    mask_U = image > X_T   # Mask for the upper region
+
+    # Step 3: Compute the cumulative distribution function (CDF) for the entire image
+    hist, bins = np.histogram(image.flatten(), bins=256, range=[0, 256])
+    cdf = hist.cumsum()  # Cumulative distribution function
+    cdf_normalized = (cdf - cdf.min()) * 255 / (cdf.max() - cdf.min())  # Normalize to [0, 255]
+    cdf_normalized = np.round(cdf_normalized).astype(np.uint8)
+
+    # Step 4: Adjust the lower and upper regions using the CDF
+    image_eq = np.copy(image)
+    image_eq[mask_L] = cdf_normalized[image[mask_L]]
+    image_eq[mask_U] = cdf_normalized[image[mask_U]]
+
+    # Ensure values are within the range [0, 255]
+    image_eq = np.clip(image_eq, 0, 255).astype(np.uint8)
+
+    return image_eq
+
+# ---------------------------------
+#                                  #
+#   Image Negative                 #
+#                                  #
 
 def ImageNegative(img):
     """
@@ -489,7 +587,14 @@ def BgrToGray(img):
     gray_img = np.clip(gray_img, 0, 255)
 
     return gray_img.astype(np.uint8)
-    
+
+# ---------------------------------
+#                                   #
+#   lebaling functions an connected #
+#   components                      #
+#                                   #
+# ---------------------------------
+
 def floodfill_separate_output(I, O, p, new_color):
     """
     Perform a flood fill on an output image O without modifying the original image I.
@@ -545,42 +650,6 @@ def connected_components_by_repeated_floodfill(I):
                 next_label += 1  # New label for the next component
 
     return L  # Labeled image
-
-def show_two_images(img1, img2, title="Comparison", orientation="horizontal"):
-    """
-    Displays two images side by side in a single window using OpenCV.
-    
-    Parameters:
-    - img1: First image (numpy array).
-    - img2: Second image (numpy array).
-    - title: Title of the window.
-    - orientation: "horizontal" (default) or "vertical".
-    """
-    # Ensure both images have the same number of channels
-    if len(img1.shape) == 2:  # If grayscale, convert to 3 channels
-        img1 = cv.cvtColor(img1, cv.COLOR_GRAY2BGR)
-    if len(img2.shape) == 2:
-        img2 = cv.cvtColor(img2, cv.COLOR_GRAY2BGR)
-
-    # Resize the smaller image to match the size
-    h1, w1 = img1.shape[:2]
-    h2, w2 = img2.shape[:2]
-
-    if orientation == "horizontal":
-        if h1 != h2:
-            max_h = max(h1, h2)
-            img1 = cv.resize(img1, (w1, max_h))
-            img2 = cv.resize(img2, (w2, max_h))
-        combined = np.hstack((img1, img2))  # Stack horizontally
-    else:
-        if w1 != w2:
-            max_w = max(w1, w2)
-            img1 = cv.resize(img1, (max_w, h1))
-            img2 = cv.resize(img2, (max_w, h2))
-        combined = np.vstack((img1, img2))  # Stack vertically
-
-    # Display the combined image
-    cv.imshow(title, combined)
 
 def FloodFillDFS(img, seed, new_color):
     """
@@ -795,6 +864,12 @@ def connected_components_by_union_find_8_connected(image):
     label_image = labels_flat.reshape(height, width)
 
     return label_image
+
+# ---------------------------------
+#                                   #
+#   Convolution functions           #
+#                                   #
+# ---------------------------------
 
 def ConvolveSeparable(I, gh, gv):
     """
@@ -1106,6 +1181,12 @@ def AddGaussianNoise(img, sigma):
  
     return Ir
 
+# ---------------------------------
+#                                   #
+#   Noise functions                #
+#                                   #
+# ---------------------------------
+
 def AddSaltAndPepperNoise(img, salt_prob, pepper_prob):
     """
     Adds salt and pepper noise to a grayscale image.
@@ -1324,6 +1405,12 @@ def NonLocalMeans(I, window_size, search_size, sigma):
 
     return (Ir * 255).astype(np.uint8)  # Convertir de vuelta a uint8
 
+# ---------------------------------
+#                                   #
+#    Filter functions               #
+#                                   #
+# ---------------------------------
+
 def BilateralFilter(I, ss, sr, niter):
     """
     Aplica un filtro bilateral iterativo a una imagen en escala de grises.
@@ -1463,7 +1550,11 @@ def GaussianFilterRGB(img, sigma):
     # Convert the smoothed image back to uint8
     return (img_smoothed * 255).astype(np.uint8)
 
-# thresholding methods
+# ---------------------------------
+#                                   #
+#   Threshold functions            #
+#                                   #
+# ---------------------------------
 
 def RidlerCalvardThreshold(img, max_iterations=100, tolerance=1e-3):
 
@@ -1527,92 +1618,42 @@ def OtsuThreshold(I):
     
     return optimal_threshold
 
-# bihistogram equalization
+def flood_fill(image, x, y, visited):
+    """ Propaga la conexión de bordes fuertes a bordes débiles (8 vecinos) """
+    h, w = image.shape
+    stack = [(x, y)]
+    
+    while stack:
+        px, py = stack.pop()
+        
+        if visited[py, px]:  # Si ya fue visitado, saltar
+            continue
+        
+        visited[py, px] = True
+        image[py, px] = 255  # Marcar como borde fuerte
+        
+        # Revisar vecinos en 8 direcciones
+        for dx in [-1, 0, 1]:
+            for dy in [-1, 0, 1]:
+                nx, ny = px + dx, py + dy
+                if 0 <= nx < w and 0 <= ny < h and not visited[ny, nx] and image[ny, nx] != 0:
+                    stack.append((nx, ny))
 
-def BihistogramEqualizationRGB(image):
-    """
-    Applies Bi-Histogram Equalization to a color image without distorting colors.
-
-    This function enhances the contrast of an image by applying histogram equalization 
-    separately to two regions: pixels with luminance values lower than a threshold and 
-    those with higher values. The threshold is determined using Otsu's method.
-
-    Parameters:
-        image (numpy.ndarray): Input color image in BGR format.
-
-    Returns:
-        numpy.ndarray: The contrast-enhanced image in BGR format.
-    """
-    # Convert to YCrCb to work only on the luminance channel
-    ycrcb = cv.cvtColor(image, cv.COLOR_BGR2YCrCb)
-    Y, Cr, Cb = cv.split(ycrcb)
-
-    # Step 1: Compute the threshold X_T using Otsu's method
-    X_T = OtsuThreshold(Y)
-    print(X_T)
-
-    # Step 2: Separate the two histograms (below and above X_T)
-    mask_L = Y <= X_T  # Mask for the lower region
-    mask_U = Y > X_T   # Mask for the upper region
-
-    # Step 3: Compute the cumulative distribution function (CDF) for the entire luminance channel
-    hist, bins = np.histogram(Y.flatten(), bins=256, range=[0, 256])
-    cdf = hist.cumsum()  # Cumulative distribution function
-    cdf_normalized = (cdf - cdf.min()) * 255 / (cdf.max() - cdf.min())  # Normalize to [0, 255]
-    cdf_normalized = np.round(cdf_normalized).astype(np.uint8)
-
-    # Step 4: Adjust the lower and upper regions using the CDF
-    Y_eq = np.copy(Y)
-    Y_eq[mask_L] = cdf_normalized[Y[mask_L]]
-    Y_eq[mask_U] = cdf_normalized[Y[mask_U]]
-
-    # Merge Y, Cr, and Cb channels and convert back to BGR
-    result = cv.merge([Y_eq, Cr, Cb])
-    result = cv.cvtColor(result, cv.COLOR_YCrCb2BGR)
-
-    return result
-
-def BihistogramEqualizationGrayscale(image):
-    """
-    Applies Bi-Histogram Equalization to a grayscale image.
-
-    This function enhances the contrast of a grayscale image by applying histogram equalization 
-    separately to two regions: pixels with intensity values lower than a threshold and those with 
-    higher values. The threshold is determined using the median of the image.
-
-    Parameters:
-        image (numpy.ndarray): Input grayscale image.
-
-    Returns:
-        numpy.ndarray: The contrast-enhanced grayscale image.
-
-    Raises:
-        ValueError: If the input image is not in grayscale format.
-    """
-    # Validate that the image is grayscale
-    if len(image.shape) != 2:
-        raise ValueError("The input image must be in grayscale format.")
-
-    # Step 1: Compute the threshold X_T as the median of the image
-    X_T = np.median(image)
-
-    # Step 2: Separate the two histograms (below and above X_T)
-    mask_L = image <= X_T  # Mask for the lower region
-    mask_U = image > X_T   # Mask for the upper region
-
-    # Step 3: Compute the cumulative distribution function (CDF) for the entire image
-    hist, bins = np.histogram(image.flatten(), bins=256, range=[0, 256])
-    cdf = hist.cumsum()  # Cumulative distribution function
-    cdf_normalized = (cdf - cdf.min()) * 255 / (cdf.max() - cdf.min())  # Normalize to [0, 255]
-    cdf_normalized = np.round(cdf_normalized).astype(np.uint8)
-
-    # Step 4: Adjust the lower and upper regions using the CDF
-    image_eq = np.copy(image)
-    image_eq[mask_L] = cdf_normalized[image[mask_L]]
-    image_eq[mask_U] = cdf_normalized[image[mask_U]]
-
-    # Ensure values are within the range [0, 255]
-    image_eq = np.clip(image_eq, 0, 255).astype(np.uint8)
-
-    return image_eq
-
+def HysteresisThreshold(image, T_low, T_high):
+    """ Aplica umbralización por histéresis """
+    # Detectar bordes débiles y fuertes
+    strong_edges = (image >= T_high).astype(np.uint8) * 255
+    weak_edges = ((image >= T_low) & (image < T_high)).astype(np.uint8) * 255
+    
+    # Imagen resultado inicializada en ceros
+    result = np.zeros_like(image, dtype=np.uint8)
+    visited = np.zeros_like(image, dtype=np.bool_)
+    
+    # Propagar bordes fuertes usando flood fill
+    h, w = image.shape
+    for y in range(h):
+        for x in range(w):
+            if strong_edges[y, x] == 255 and not visited[y, x]:
+                flood_fill(weak_edges, x, y, visited)  # Expande bordes fuertes
+    
+    return weak_edges  # Retorna la imagen binaria con los bordes confirmados
