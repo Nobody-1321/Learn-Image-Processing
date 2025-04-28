@@ -1551,12 +1551,12 @@ def GaussianFilterGrayscale(img, sigma):
 
     return (img_smoothed * 255).astype(np.uint8)  # Convert back to uint8
 
-def GaussianFilterRGB(img, sigma):
+def GaussianFilterBGR(img, sigma):
     """
-    Applies a Gaussian filter to an RGB image.
+    Applies a Gaussian filter to an BGR image.
 
     Parameters:
-    - img: RGB image (numpy array).
+    - img: BGR image (numpy array).
     - sigma: Standard deviation of the Gaussian filter.
 
     Returns:

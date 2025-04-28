@@ -42,9 +42,8 @@ def main():
 
     # Apply strong Gaussian smoothing to the background
     # NOTE: The 'GaussianFilterRGB' function is slow because it is not optimized for performance.
-    img3_smoothed = lip.GaussianFilterRGB(img3, 15.0)
+    img3_smoothed = lip.GaussianFilterBGR(img3, 15.0)
     
-
     # Load a binary mask (white for the object, black for the background)
     # Important: Load the mask in grayscale mode
     mask = cv2.imread("img_data/masklena.png", cv2.IMREAD_GRAYSCALE)
