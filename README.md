@@ -35,7 +35,7 @@ If you want to dive deeper into image processing, here are some great books, web
 - [OpenCV Documentation](https://docs.opencv.org/) - Official OpenCV documentation.  
 
 
-### 📄 Research Papers  
+### Research Papers  
 ---
 
 ## Development Status  

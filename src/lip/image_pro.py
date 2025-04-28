@@ -1,8 +1,10 @@
 import cv2 as cv
 import numpy as np
 from scipy.ndimage import gaussian_filter
-from scipy.special import factorial
+from scipy.special import factorial 
 from collections import deque
+from scipy.ndimage import convolve1d
+
 
 def channels_bgr(img):
     """
@@ -570,22 +572,33 @@ def GammaCorrection(image, gamma, intensity_levels=256):
 def BgrToGray(img):
     """
     Convert a BGR image to a grayscale image.
-    This function takes an image in BGR format and converts it to a grayscale image.
-    
+    This function takes an image in BGR format and converts it to a grayscale image
+    using a weighted sum of the color channels based on human visual perception.
+
     Parameters:
         - img (numpy.ndarray): Input image in BGR format.
+
     Returns:
         - numpy.ndarray: Grayscale image.
     """
-    
+
+    # Convert to float for precise calculation (avoiding integer rounding issues)
     img = img.astype(np.float32)
 
+    # Split image into individual color channels
     blue, green, red = cv.split(img)
-    
+
+    # Weighted average to convert to grayscale:
+    # The weights reflect the human eye's sensitivity to each color.
+    # Humans are most sensitive to green, then red, and least to blue.
+    # This formula is based on the ITU-R BT.601 standard:
+    #    Gray = 0.299 * R + 0.587 * G + 0.114 * B
     gray_img = 0.299 * red + 0.587 * green + 0.114 * blue
-    
+
+    # Ensure pixel values remain in the valid 0-255 range
     gray_img = np.clip(gray_img, 0, 255)
 
+    # Convert back to 8-bit integer format
     return gray_img.astype(np.uint8)
 
 # ---------------------------------
@@ -873,25 +886,27 @@ def connected_components_by_union_find_8_connected(image):
 
 def ConvolveSeparable(I, gh, gv):
     """
-    Aplica la convolución separable a la imagen I usando los kernels 1D gh (horizontal) y gv (vertical).
+    Applies separable convolution to the input image I using 1D kernels gh (horizontal) and gv (vertical).
 
-    Parámetros:
-    - I: Imagen de entrada (numpy array 2D).
-    - gh: Kernel 1D para la convolución horizontal.
-    - gv: Kernel 1D para la convolución vertical.
+    Parameters:
+    - I: 2D numpy array representing the input grayscale image.
+    - gh: 1D numpy array representing the horizontal convolution kernel.
+    - gv: 1D numpy array representing the vertical convolution kernel.
 
-    Retorna:
-    - Ir: Imagen después de la convolución con los dos kernels.
+    Returns:
+    - Itmp: 2D numpy array representing the image after applying both convolutions.
+            Note: The returned image is the intermediate result after vertical convolution,
+            with padding removed.
     """
 
     height, width = I.shape
     w = len(gh)
     pad_size = w // 2
 
-    # Paso 1: Padding de la imagen
+    # Step 1: Apply padding to the input image
     I_padded = np.pad(I, ((pad_size, pad_size), (pad_size, pad_size)), mode='reflect')
 
-    # Paso 2: Convolución horizontal
+    # Step 2: Horizontal convolution
     Itmp = np.zeros_like(I_padded, dtype=np.float32)
     for y in range(height):
         for x in range(width):
@@ -899,8 +914,8 @@ def ConvolveSeparable(I, gh, gv):
             for i in range(w):
                 val += gh[i] * I_padded[y + pad_size, x + i]
             Itmp[y + pad_size, x + pad_size] = val
-    
-    # Paso 3: Convolución vertical
+
+    # Step 3: Vertical convolution
     Ir = np.zeros_like(I_padded, dtype=np.float32)
     for y in range(height):
         for x in range(width):
@@ -908,15 +923,32 @@ def ConvolveSeparable(I, gh, gv):
             for i in range(w):
                 val += gv[i] * Itmp[y + i, x + pad_size]
             Ir[y + pad_size, x + pad_size] = val
+
+    # Remove padding (currently only returning the intermediate result)
+    Ir = Ir[pad_size:-pad_size, pad_size:-pad_size]
+    return Ir
     
-            
-    # Eliminar el padding
-    #Ir = Ir[pad_size:-pad_size, pad_size:-pad_size]
-    Itmp = Itmp[pad_size:-pad_size, pad_size:-pad_size]
+def ConvolveSeparableOpt(I, gh, gv):
+    """
+    Applies separable convolution to the input image I using 1D kernels gh (horizontal) and gv (vertical).
+    
+    Optimized version using scipy.ndimage.convolve1d.
 
+    Parameters:
+    - I: 2D numpy array (grayscale image).
+    - gh: 1D numpy array (horizontal kernel).
+    - gv: 1D numpy array (vertical kernel).
 
+    Returns:
+    - Ir: 2D numpy array (result after separable convolution).
+    """
+    # Apply horizontal convolution (axis=1 -> along columns)
+    Itmp = convolve1d(I, gh, axis=1, mode='reflect')
 
-    return Itmp
+    # Apply vertical convolution (axis=0 -> along rows)
+    Ir = convolve1d(Itmp, gv, axis=0, mode='reflect')
+
+    return Ir
 
 def GetKernelHalfWidth(sigma):
     """
@@ -1515,7 +1547,7 @@ def GaussianFilterGrayscale(img, sigma):
     img = img.astype(np.float32) / 255.0  # Normalize the image
 
     gauss = CreateGaussianKernel(sigma)
-    img_smoothed = ConvolveSeparable(img, gauss, gauss)
+    img_smoothed = ConvolveSeparableOpt(img, gauss, gauss)
 
     return (img_smoothed * 255).astype(np.uint8)  # Convert back to uint8
 
@@ -1545,7 +1577,7 @@ def GaussianFilterRGB(img, sigma):
 
     # Apply the Gaussian filter to each channel (R, G, B) independently
     for i in range(3):  # The three color channels: R, G, B
-        img_smoothed[:, :, i] = ConvolveSeparable(img[:, :, i], gauss, gauss)
+        img_smoothed[:, :, i] = ConvolveSeparableOpt(img[:, :, i], gauss, gauss)
 
     # Convert the smoothed image back to uint8
     return (img_smoothed * 255).astype(np.uint8)
