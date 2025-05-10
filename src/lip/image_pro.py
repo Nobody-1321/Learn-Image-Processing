@@ -1051,6 +1051,37 @@ def ConvolveBox1(f, w):
     
     return result
 
+def CreateGaussianSecondDerivativeKernel(sigma):
+    """
+    Generates a 1D Gaussian second derivative kernel for edge detection.
+
+    Parameters:
+    - sigma (float): Standard deviation of the Gaussian function.
+
+    Returns:
+    - gauss_deriv2 (numpy.ndarray): The 1D Gaussian second derivative kernel.
+    """
+    # Paso 1: Obtener la mitad del ancho del kernel
+    half_width = GetKernelHalfWidth(sigma)
+    
+    # Paso 2: Calcular el ancho total (siempre impar)
+    w = 2 * half_width + 1
+
+    # Paso 3: Inicializar el kernel y el factor de normalización
+    gauss_deriv2 = np.zeros(w, dtype=np.float32)
+    norm = 0.0
+
+    # Paso 4: Calcular la segunda derivada de la función Gaussiana
+    for i in range(w):
+        x = i - half_width  # Centramos los valores alrededor de 0
+        gauss_deriv2[i] = (x ** 2 / (sigma ** 4) - 1 / (sigma ** 2)) * np.exp(- (x ** 2) / (2 * sigma ** 2))  # Segunda derivada de Gauss
+        norm += abs(gauss_deriv2[i])  # Normalización basada en la suma de los valores absolutos
+
+    # Paso 5: Normalizar el kernel
+    gauss_deriv2 /= norm
+
+    return gauss_deriv2
+
 def CreateGaussianDerivativeKernel(sigma):
     """
     Generates a 1D Gaussian derivative kernel for edge detection.
@@ -1118,12 +1149,15 @@ def SobelOperator(image):
     # Calcular la magnitud del gradiente
     G = np.sqrt(Gx**2 + Gy**2)
 
+    Gphase = np.arctan2(Gy, Gx)  # Fase del gradiente (dirección)
+
     # Normalizar para visualización
     Gx = cv.normalize(Gx, None, 0, 255, cv.NORM_MINMAX)
     Gy = cv.normalize(Gy, None, 0, 255, cv.NORM_MINMAX)
     G = cv.normalize(G, None, 0, 255, cv.NORM_MINMAX)
+    Gphase = cv.normalize(Gphase, None, 0, 255, cv.NORM_MINMAX)
 
-    return Gx.astype(np.uint8), Gy.astype(np.uint8), G.astype(np.uint8)
+    return Gx.astype(np.uint8), Gy.astype(np.uint8), G.astype(np.uint8) , Gphase.astype(np.uint8)
 
 def ScharOperator(image):
         # Definir los kernels de Sobel
@@ -1153,13 +1187,39 @@ def ScharOperator(image):
 
     return Gx, Gy, G
 
-def ComputeImageGradient(img, sigma):
+def ComputeLaplacianGaussian(img, sigma_s, sigma_d):
+    """
+    Compute the Laplacian of Gaussian using separable convolution.
+
+    Parameters:
+    - img: Input image (grayscale, float32).
+    - sigma_s: sigma for smoothing Gaussian.
+    - sigma_d: sigma for second derivative.
+
+    Returns:
+    - LoG: Laplacian of Gaussian image.
+    """
+    img = img.astype(np.float32)
+
+    gauss = CreateGaussianKernel(sigma_s)
+    gauss_2nd = CreateGaussianSecondDerivativeKernel(sigma_d)
+
+    Gxx = ConvolveSeparableOpt(img, gauss_2nd, gauss)  # ∂²I/∂x²
+    Gyy = ConvolveSeparableOpt(img, gauss, gauss_2nd)  # ∂²I/∂y²
+
+    LoG = Gxx + Gyy  # Laplacian = d²/dx² + d²/dy²
+
+    LoG = cv.normalize(LoG, None, 0, 255, cv.NORM_MINMAX)
+    return LoG.astype(np.uint8)
+
+def ComputeImageGradient(img, sigma_s, sigma_d):
     """
     Compute the image gradient using the Gaussian derivative kernel.
 
     Parameters:
     - img: The input image (numpy array).
-    - sigma: The standard deviation of the Gaussian kernel.
+    - sigma_s: Standard deviation for the Gaussian kernel.
+    - sigma_d: Standard deviation for the Gaussian derivative kernel.
 
     Returns:
     - Gx: The gradient image in the X direction.
@@ -1171,12 +1231,12 @@ def ComputeImageGradient(img, sigma):
     img = img.astype(np.float32)
 
     # Step 1: Create the Gaussian derivative kernel
-    gauss_deriv = CreateGaussianDerivativeKernel(sigma)
+    gauss = CreateGaussianKernel(sigma_s)
+    gauss_deriv = CreateGaussianDerivativeKernel(sigma_d)
 
-    # Step 2: Apply the convolution
-    Gx = ConvolveSeparable(img, gauss_deriv, gauss_deriv)
-    Gy = ConvolveSeparable(img, gauss_deriv, gauss_deriv)
-
+    Gx = ConvolveSeparableOpt(img, gauss_deriv, gauss)  # Convolve with the Gaussian derivative kernel
+    Gy = ConvolveSeparableOpt(img, gauss, gauss_deriv)  # Convolve with the Gaussian kernel
+   
     # Step 3: Compute the magnitude and phase of the gradient
 
     # Step 3: Compute the magnitude and phase of the gradient
