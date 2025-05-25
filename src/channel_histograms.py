@@ -4,9 +4,8 @@ import lip
 
 # Load the image
 
-path = lip.parse_args_path()
+img = cv.imread("img_data/uvas.jpg")
 
-img = cv.imread(path)
 if img is None:
     print("Error: Could not load the image.")
     exit()

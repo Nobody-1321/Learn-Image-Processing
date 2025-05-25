@@ -33,9 +33,8 @@ def save_image(img):
 
 def main():
     
-    path = lip.parse_args_path()
-    img = lip.open_image(path) 
-    
+    img = cv.imread("img_data/uvas.jpg")
+
     if img is None:
         print("Error: Could not load the image.")
         exit()

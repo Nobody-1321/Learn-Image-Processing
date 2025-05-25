@@ -4,6 +4,7 @@ from scipy.ndimage import gaussian_filter
 from scipy.special import factorial 
 from collections import deque
 from scipy.ndimage import convolve1d
+from scipy.special import comb
 
 
 def channels_bgr(img):
@@ -1061,23 +1062,26 @@ def CreateGaussianSecondDerivativeKernel(sigma):
     Returns:
     - gauss_deriv2 (numpy.ndarray): The 1D Gaussian second derivative kernel.
     """
-    # Paso 1: Obtener la mitad del ancho del kernel
+
+    # Step 1: Get the half-width of the kernel based on sigma
     half_width = GetKernelHalfWidth(sigma)
-    
-    # Paso 2: Calcular el ancho total (siempre impar)
+
+    # Step 2: Calculate the total width (always odd)
     w = 2 * half_width + 1
 
-    # Paso 3: Inicializar el kernel y el factor de normalización
+    # Step 3: Initialize the kernel and normalization factor
     gauss_deriv2 = np.zeros(w, dtype=np.float32)
     norm = 0.0
 
-    # Paso 4: Calcular la segunda derivada de la función Gaussiana
+    # Step 4: Compute the second derivative of the Gaussian function for each position
     for i in range(w):
-        x = i - half_width  # Centramos los valores alrededor de 0
-        gauss_deriv2[i] = (x ** 2 / (sigma ** 4) - 1 / (sigma ** 2)) * np.exp(- (x ** 2) / (2 * sigma ** 2))  # Segunda derivada de Gauss
-        norm += abs(gauss_deriv2[i])  # Normalización basada en la suma de los valores absolutos
+        x = i - half_width  # Center the kernel at zero
+        # Compute the second derivative of the Gaussian at position x
+        gauss_deriv2[i] = (x ** 2 / (sigma ** 4) - 1 / (sigma ** 2)) * np.exp(- (x ** 2) / (2 * sigma ** 2))
+        # Accumulate the absolute value for normalization
+        norm += abs(gauss_deriv2[i])
 
-    # Paso 5: Normalizar el kernel
+    # Step 5: Normalize the kernel so that the sum of absolute values is 1
     gauss_deriv2 /= norm
 
     return gauss_deriv2
@@ -1251,6 +1255,42 @@ def ComputeImageGradient(img, sigma_s, sigma_d):
     
     return Gx.astype(np.uint8), Gy.astype(np.uint8), Gmag.astype(np.uint8), Gphase.astype(np.uint8)
 
+# ---------------------------------
+#                                   #
+#   Noise functions                #
+#                                   #
+# ---------------------------------
+
+def AddPeriodicNoise(img, amplitude=30, frequency=0.05, angle=0):
+    """
+    Adds periodic (sinusoidal) noise to a grayscale or color image.
+
+    Parameters:
+    - img: Input image (numpy array, uint8, grayscale or color).
+    - amplitude: Amplitude of the sinusoidal noise.
+    - frequency: Frequency of the sinusoidal pattern (cycles per pixel).
+    - angle: Angle of the sinusoidal pattern in degrees.
+
+    Returns:
+    - Image with periodic noise.
+    """
+
+    # Prepare grid
+    rows, cols = img.shape[:2]
+    yy, xx = np.mgrid[0:rows, 0:cols]
+    theta = np.deg2rad(angle)
+    # Create sinusoidal pattern
+    sinusoid = amplitude * np.sin(2 * np.pi * frequency * (xx * np.cos(theta) + yy * np.sin(theta)))
+
+    # If image is color, add noise to all channels
+    if img.ndim == 3:
+        noisy = img.astype(np.float32) + sinusoid[..., None]
+    else:
+        noisy = img.astype(np.float32) + sinusoid
+
+    noisy = np.clip(noisy, 0, 255).astype(np.uint8)
+    return noisy
+
 def AddGaussianNoise(img, sigma):
     """
     Adds independent Gaussian noise to a grayscale image.
@@ -1272,12 +1312,6 @@ def AddGaussianNoise(img, sigma):
     Ir = np.clip(Ir, 0, 255).astype(np.uint8)
  
     return Ir
-
-# ---------------------------------
-#                                   #
-#   Noise functions                #
-#                                   #
-# ---------------------------------
 
 def AddSaltAndPepperNoise(img, salt_prob, pepper_prob):
     """
@@ -1353,97 +1387,123 @@ def AddSpeckleNoise(img, sigma):
     noisy_img = np.clip(noisy_img, 0, 255).astype(np.uint8)
     return noisy_img
 
-def MedianFilter1(image, window_size):
+# ---------------------------------
+#                                   #
+#    Filter functions               #
+#                                   #
+# ---------------------------------
+
+def MeanShiftFilter(I, hs, hr, max_iter=10, epsilon=1e-3):
     """
-    Aplica un filtro de mediana a una imagen en escala de grises utilizando un histograma deslizante.
+    Optimized Mean Shift filter for grayscale images (edge-preserving smoothing).
 
-    Parámetros:
-    - image: Imagen en escala de grises (numpy array).
-    - window_size: Tamaño de la ventana cuadrada para calcular la mediana (debe ser impar).
+    Parameters:
+    - I: Input grayscale image (numpy array, uint8 or float32).
+    - hs: Spatial bandwidth (controls spatial window size).
+    - hr: Range bandwidth (controls intensity similarity).
+    - max_iter: Maximum number of iterations per pixel.
+    - epsilon: Convergence threshold for the mean-shift vector.
 
-    Retorna:
-    - Imagen filtrada con el filtro de mediana.
+    Returns:
+    - Ir: Output image after mean-shift filtering (same shape as I).
     """
+    I = I.astype(np.float32)
+    height, width = I.shape
+    Ir = np.zeros_like(I, dtype=np.float32)
+    hs = int(np.ceil(hs))
 
-    # Asegurar que el tamaño de la ventana sea impar
-    if window_size % 2 == 0:
-        raise ValueError("El tamaño de la ventana debe ser un número impar.")
+    # Precompute spatial grid for window
+    grid_y, grid_x = np.mgrid[-hs:hs+1, -hs:hs+1]
+    spatial_dist2 = (grid_x**2 + grid_y**2) / (hs**2)
 
-    half_w = window_size // 2  # Mitad de la ventana
-    height, width = image.shape
-    filtered_image = np.zeros_like(image, dtype=np.uint8)
-
-    # Inicializar histograma para la primera ventana
-    histogram = np.zeros(256, dtype=int)
-
-    # Construir histograma inicial para la primera columna
-    for y in range(window_size):
-        for x in range(window_size):
-            histogram[image[y, x]] += 1
-
-    # Función para encontrar la mediana en el histograma acumulado
-    def find_median(hist, total_pixels):
-        count = 0
-        for i in range(256):
-            count += hist[i]
-            if count >= total_pixels:
-                return i
-
-    median_pos = (window_size * window_size) // 2  # Posición del valor mediano
-
-    # Aplicar filtro de mediana con histograma deslizante
-    for y in range(height - window_size + 1):
-        if y > 0:
-            # Actualizar histograma eliminando la fila superior anterior y agregando la nueva fila inferior
-            for x in range(window_size):
-                histogram[image[y - 1, x]] -= 1  # Remover la fila superior
-                histogram[image[y + window_size - 1, x]] += 1  # Agregar la fila inferior
-
-        # Clonar histograma para manipularlo en la dirección X
-        current_hist = histogram.copy()
-        filtered_image[y + half_w, half_w] = find_median(current_hist, median_pos)
-
-        for x in range(1, width - window_size + 1):
-            # Deslizar ventana en la dirección X
-            for i in range(window_size):
-                current_hist[image[y + i, x - 1]] -= 1  # Quitar pixel de la izquierda
-                current_hist[image[y + i, x + window_size - 1]] += 1  # Agregar pixel de la derecha
-
-            # Calcular la mediana en la nueva ventana
-            filtered_image[y + half_w, x + half_w] = find_median(current_hist, median_pos)
-
-    return filtered_image
-
-def MedianFilter(img, w):
-    """
-    Aplica un filtro de mediana a una imagen en escala de grises.
-
-    Parámetros:
-    - img: Imagen de entrada (numpy array en escala de grises).
-    - w: Tamaño de la ventana cuadrada (debe ser impar).
-
-    Retorna:
-    - Ir: Imagen filtrada con el filtro de mediana.
-    """
-    height, width = img.shape
-    half_w = w // 2  # Determina la mitad del ancho del filtro
-    Ir = np.zeros_like(img)  # Imagen de salida
-
-    # Recorremos cada píxel de la imagen
     for y in range(height):
         for x in range(width):
-            # Definir los límites de la ventana de filtrado
-            y1, y2 = max(0, y - half_w), min(height, y + half_w + 1)
-            x1, x2 = max(0, x - half_w), min(width, x + half_w + 1)
+            xr, yr, vr = x, y, I[y, x]
+            for _ in range(max_iter):
+                # Define window bounds
+                y0 = max(0, int(round(yr)) - hs)
+                y1 = min(height, int(round(yr)) + hs + 1)
+                x0 = max(0, int(round(xr)) - hs)
+                x1 = min(width, int(round(xr)) + hs + 1)
 
-            # Extraer la ventana y calcular la mediana
-            window = img[y1:y2, x1:x2].flatten()
-            med = np.median(window)
+                patch = I[y0:y1, x0:x1]
+                gy, gx = np.ogrid[y0-y:int(y1-y), x0-x:int(x1-x)]
+                # Adjust spatial distances for border windows
+                sy = grid_y[(gy + hs)[:patch.shape[0]], (gx + hs)[:patch.shape[1]]]
+                sx = grid_x[(gy + hs)[:patch.shape[0]], (gx + hs)[:patch.shape[1]]]
+                spatial = (sx**2 + sy**2) / (hs**2)
 
-            # Asignar el valor mediano al píxel correspondiente
-            Ir[y, x] = med
+                range_dist2 = ((patch - vr) ** 2) / (hr ** 2)
+                w = np.exp(-0.5 * (spatial + range_dist2))
 
-    return Ir
+                norm = np.sum(w)
+                if norm == 0:
+                    break
+                x_new = np.sum(w * np.arange(x0, x1)) / norm
+                y_new = np.sum(w * np.arange(y0, y1)[:, None]) / norm
+                v_new = np.sum(w * patch) / norm
+
+                shift = np.sqrt((xr - x_new) ** 2 + (yr - y_new) ** 2 + (vr - v_new) ** 2)
+                xr, yr, vr = x_new, y_new, v_new
+                if shift < epsilon:
+                    break
+            Ir[y, x] = vr
+
+    return np.clip(Ir, 0, 255).astype(np.uint8)
+
+def MedianFilterGrayscale(image, window_size):
+    """
+    Applies a median filter to a grayscale image using efficient NumPy operations.
+
+    Parameters:
+    - image: Grayscale image (numpy array).
+    - window_size: Size of the square window to compute the median (must be odd).
+
+    Returns:
+    - Filtered image with the median filter applied.
+    """
+    if window_size % 2 == 0:
+        raise ValueError("Window size must be odd.")
+
+    pad = window_size // 2
+    # Pad the image to handle borders
+    padded = np.pad(image, pad, mode='edge')
+    height, width = image.shape
+    filtered = np.zeros_like(image, dtype=np.uint8)
+
+    # Use a sliding window and compute the median for each region
+    for y in range(height):
+        for x in range(width):
+            window = padded[y:y+window_size, x:x+window_size]
+            filtered[y, x] = np.median(window)
+    return filtered
+
+def MedianFilterBGR(image, window_size):
+    """
+    Applies a median filter to a BGR color image using efficient NumPy operations.
+
+    Parameters:
+    - image: BGR color image (numpy array, shape HxWx3).
+    - window_size: Size of the square window to compute the median (must be odd).
+
+    Returns:
+    - Filtered image with the median filter applied to each channel.
+    """
+    if window_size % 2 == 0:
+        raise ValueError("Window size must be odd.")
+
+    pad = window_size // 2
+    height, width, channels = image.shape
+    filtered = np.zeros_like(image, dtype=np.uint8)
+
+    # Apply the median filter to each channel independently
+    for c in range(channels):
+        padded = np.pad(image[:, :, c], pad, mode='edge')
+        for y in range(height):
+            for x in range(width):
+                window = padded[y:y+window_size, x:x+window_size]
+                filtered[y, x, c] = np.median(window)
+    return filtered
 
 def NonLocalMeans(I, window_size, search_size, sigma):
     """
@@ -1497,12 +1557,6 @@ def NonLocalMeans(I, window_size, search_size, sigma):
 
     return (Ir * 255).astype(np.uint8)  # Convertir de vuelta a uint8
 
-# ---------------------------------
-#                                   #
-#    Filter functions               #
-#                                   #
-# ---------------------------------
-
 def BilateralFilter(I, ss, sr, niter):
     """
     Aplica un filtro bilateral iterativo a una imagen en escala de grises.
@@ -1544,54 +1598,118 @@ def BilateralFilter(I, ss, sr, niter):
 
     return (I * 255).astype(np.uint8)  # Convertir de vuelta a uint8
 
-def BilateralFilterFast(I, ss, sr, niter, n=3):
+def BilateralFilterGrayscale(I, ss, sr, n_iter=1, n=3):
     """
-    Aplica un filtro bilateral rápido a una imagen en escala de grises utilizando un coseno elevado.
+    Applies a fast bilateral filter to a grayscale image using raised cosine approximation.
 
-    Parámetros:
-    - I: Imagen en escala de grises (numpy array).
-    - ss: Desviación estándar del kernel espacial.
-    - sr: Desviación estándar del kernel de rango.
-    - niter: Número de iteraciones.
-    - n: Parámetro de aproximación (valor recomendado: n=3).
+    Parameters:
+    ----------
+    I : np.ndarray
+        Input grayscale image (uint8 or float32), values in range [0, 255] or [0.0, 1.0].
+    ss : float
+        Spatial standard deviation (sigma_s) of the Gaussian kernel.
+    sr : float
+        Range standard deviation (sigma_r) for intensity differences.
+    n_iter : int, optional
+        Number of iterations to apply the filter (default is 1).
+    n : int, optional
+        Degree of the raised cosine approximation (default is 3).
 
-    Retorna:
-    - Imagen filtrada con el filtro bilateral rápido.
+    Returns:
+    -------
+    np.ndarray
+        Filtered grayscale image in uint8 format, values in range [0, 255].
     """
-    I = I.astype(np.float32) / 255.0  # Normalizar imagen a [0,1]
-    g = 1.0 / sr  # Factor de normalización
-    height, width = I.shape
+    I = I.astype(np.float32) / 255.0  # Normalize input image to [0,1]
+    g = 1.0 / sr  # Inverse of range standard deviation
+    sqrt_n = np.sqrt(n)
 
-    for _ in range(niter):  # Iteraciones del filtro
+    h, w = I.shape
+
+    binomial_coeffs = np.array([comb(n, i, exact=False) / (2 ** (2 * n - 2)) for i in range(n + 1)], dtype=np.float32)
+
+    for _ in range(n_iter):
         num = np.zeros_like(I, dtype=np.float32)
         den = np.zeros_like(I, dtype=np.float32)
 
         for i in range(n + 1):
-            # Cálculo de coeficientes
-            v = g * (2 * i - n) * I / np.sqrt(n)
-            b = factorial(n) / (factorial(i) * factorial(n - i) * (2 ** (2 * n - 2)))
+            v = g * (2 * i - n) * I / sqrt_n  # Argument of cosine and sine
 
-            # Crear imágenes Hi, Gi y Di (complejas)
-            Hi = np.stack([np.cos(v), np.sin(v)], axis=-1)  # 2 canales: [cos(v), sin(v)]
-            Gi = I[..., np.newaxis] * Hi  # Producto punto con I
-            Di = Hi * b  # Aplicación del peso b
+            # Weight factor (binomial coefficient)
+            b = binomial_coeffs[i]
 
-            # Aplicar suavizado Gaussiano separadamente en cada canal
-            Gir = np.stack([gaussian_filter(Gi[..., 0], sigma=ss), 
-                            gaussian_filter(Gi[..., 1], sigma=ss)], axis=-1)
-            Hir = np.stack([gaussian_filter(Hi[..., 0], sigma=ss), 
-                            gaussian_filter(Hi[..., 1], sigma=ss)], axis=-1)
+            cos_v = np.cos(v)
+            sin_v = np.sin(v)
 
-            # Acumulación de numerador y denominador
-            num += Di[..., 0] * Gir[..., 0] + Di[..., 1] * Gir[..., 1]
-            den += Di[..., 0] * Hir[..., 0] + Di[..., 1] * Hir[..., 1]
+            Hi0 = cos_v
+            Hi1 = sin_v
 
-        # División de los valores y tomar la parte real
-        Ir = np.divide(num, den, out=I, where=den != 0)
+            Gi0 = I * Hi0
+            Gi1 = I * Hi1
 
-        I = Ir.copy()  # Actualizar imagen para la siguiente iteración
+            # Apply Gaussian filtering to both components
+            Gir0 = gaussian_filter(Gi0, sigma=ss)
+            Gir1 = gaussian_filter(Gi1, sigma=ss)
+            Hir0 = gaussian_filter(Hi0, sigma=ss)
+            Hir1 = gaussian_filter(Hi1, sigma=ss)
 
-    return (I * 255).astype(np.uint8)  # Convertir a uint8 (0-255)
+            # Accumulate numerator and denominator
+            num += b * (Hi0 * Gir0 + Hi1 * Gir1)
+            den += b * (Hi0 * Hir0 + Hi1 * Hir1)
+
+        # Avoid division by zero
+        I = np.divide(num, den, out=np.zeros_like(I), where=den != 0)
+
+    return np.clip(I * 255, 0, 255).astype(np.uint8)
+
+def BilateralFilterBGR(I_bgr, ss, sr, niter=1, n=3):
+    """
+    Applies the fast bilateral filter to a BGR color image using elevated cosine approximation.
+    
+    Parameters:
+    - I_bgr: Input image in BGR format (numpy array of shape HxWx3, dtype=uint8).
+    - ss: Spatial standard deviation (sigma for spatial Gaussian).
+    - sr: Range standard deviation (sigma for intensity Gaussian).
+    - niter: Number of iterations (default: 1).
+    - n: Approximation parameter; higher values approximate the Gaussian more closely (recommended: 3-5).
+    
+    Returns:
+    - Filtered image in BGR format (numpy array of dtype=uint8).
+    """
+    # Normalize the input to [0,1]
+    I_bgr = I_bgr.astype(np.float32) / 255.0
+    g = 1.0 / sr
+    h, w, c = I_bgr.shape
+    output = np.empty_like(I_bgr)
+
+    for ch in range(3):  # Process each BGR channel independently
+        I = I_bgr[..., ch]
+        for _ in range(niter):
+            num = np.zeros_like(I, dtype=np.float32)
+            den = np.zeros_like(I, dtype=np.float32)
+
+            for i in range(n + 1):
+                v = g * (2 * i - n) * I / np.sqrt(n)
+                b = comb(n, i, exact=False) / (2 ** (2 * n - 2))
+
+                Hi = np.stack([np.cos(v), np.sin(v)], axis=-1)
+                Gi = I[..., np.newaxis] * Hi
+                Di = Hi * b
+
+                Gir = np.stack([gaussian_filter(Gi[..., 0], sigma=ss),
+                                gaussian_filter(Gi[..., 1], sigma=ss)], axis=-1)
+                Hir = np.stack([gaussian_filter(Hi[..., 0], sigma=ss),
+                                gaussian_filter(Hi[..., 1], sigma=ss)], axis=-1)
+
+                num += Di[..., 0] * Gir[..., 0] + Di[..., 1] * Gir[..., 1]
+                den += Di[..., 0] * Hir[..., 0] + Di[..., 1] * Hir[..., 1]
+
+            I = np.divide(num, den, out=I, where=den != 0)
+
+        output[..., ch] = I
+
+    # Convert back to uint8
+    return (np.clip(output, 0, 1) * 255).astype(np.uint8)
 
 def GaussianFilterGrayscale(img, sigma):
     """
