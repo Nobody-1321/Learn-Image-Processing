@@ -18,8 +18,9 @@ If you're interested in learning more about image processing techniques, the alg
 
 [Spatial domain filtering -Gaussian filter.](https://medium.com/@fjzavala/spatial-domain-filtering-gaussian-filter-188c38fef22e)
 
-[Gradient and Second Derivative in Images](https://medium.com/@fjzavala/gradient-and-second-derivative-in-images-fundamentals-and-efficient-applications-46832da5c75f)
+[Convolution and Gaussian Filters: Theory and Applications in Digital Images.](https://medium.com/@fjzavala/gradient-and-second-derivative-in-images-fundamentals-and-efficient-applications-46832da5c75f)
 
+[Nonlinear Filters in Image Processing.](https://medium.com/imagecraft/nonlinear-filters-in-image-processing-18bb01720983)
 
 ---
 
@@ -51,5 +52,7 @@ If you want to dive deeper into image processing, here are some great books, web
 ### Research Papers  
 ---
 
-## Development Status  
-**This repository is a work in progress.** Updates and new features will be added regularly as development continues. Stay tuned for future improvements!
+## Support and Feedback  
+If you found this repository useful, please consider giving it a ⭐ star and sharing it with others.  
+It helps me know that the material is valuable and encourages me to keep writing more in-depth articles and explanations on related topics.  
+Your feedback and support are what drive this project forward!

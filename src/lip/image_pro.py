@@ -5,6 +5,7 @@ from scipy.special import factorial
 from collections import deque
 from scipy.ndimage import convolve1d
 from scipy.special import comb
+from numba import njit
 
 
 def channels_bgr(img):
@@ -1451,6 +1452,67 @@ def MeanShiftFilter(I, hs, hr, max_iter=10, epsilon=1e-3):
 
     return np.clip(Ir, 0, 255).astype(np.uint8)
 
+'''
+def median_filter_grayscale_histogram(image, window_size):
+    """
+    Optimized median filter for grayscale images using histogram-based approach.
+
+    Parameters:
+    - image: 2D NumPy array (grayscale).
+    - window_size: Odd integer size of the square window.
+
+    Returns:
+    - Median filtered image as NumPy array.
+    """
+    if window_size % 2 == 0:
+        raise ValueError("Window size must be odd.")
+
+    pad = window_size // 2
+    padded_image = np.pad(image, pad, mode='edge')
+    height, width = image.shape
+    filtered_image = np.zeros_like(image, dtype=np.uint8)
+
+    max_val = 256  # para imágenes en uint8
+    window_area = window_size * window_size
+    median_pos = (window_area // 2) + 1
+
+    for y in range(height):
+        hist = np.zeros(max_val, dtype=int)
+
+        # Inicializar histograma para la primera ventana
+        for dy in range(window_size):
+            for dx in range(window_size):
+                pixel_val = padded_image[y + dy, dx]
+                hist[pixel_val] += 1
+
+        def get_median(hist):
+            cumulative = 0
+            for value in range(max_val):
+                cumulative += hist[value]
+                if cumulative >= median_pos:
+                    return value
+            return 0  # fallback (no debería ocurrir)
+
+        filtered_image[y, 0] = get_median(hist)
+
+        # Deslizar la ventana horizontalmente y actualizar histograma
+        for x in range(1, width):
+            for dy in range(window_size):
+                left_val = padded_image[y + dy, x - 1]
+                right_val = padded_image[y + dy, x - 1 + window_size]
+                hist[left_val] -= 1
+                hist[right_val] += 1
+            filtered_image[y, x] = get_median(hist)
+
+    return filtered_image
+
+def median_filter_bgr_histogram(image, window_size):
+    filtered = np.zeros_like(image)
+    for c in range(3):
+        filtered[:, :, c] = median_filter_grayscale_histogram(image[:, :, c], window_size)
+    return filtered
+'''
+
 def MedianFilterGrayscale(image, window_size):
     """
     Applies a median filter to a grayscale image using efficient NumPy operations.
@@ -1476,6 +1538,7 @@ def MedianFilterGrayscale(image, window_size):
         for x in range(width):
             window = padded[y:y+window_size, x:x+window_size]
             filtered[y, x] = np.median(window)
+
     return filtered
 
 def MedianFilterBGR(image, window_size):
@@ -1504,6 +1567,95 @@ def MedianFilterBGR(image, window_size):
                 window = padded[y:y+window_size, x:x+window_size]
                 filtered[y, x, c] = np.median(window)
     return filtered
+
+def MeanShiftFilterBGR(image, hs, hr, max_iter=5, eps=1.0):
+    """
+    Fast mean-shift filter for BGR images (applied in LAB space).
+
+    Parameters:
+        image: Input BGR image (uint8).
+        hs: Spatial bandwidth.
+        hr: Range (color) bandwidth.
+        max_iter: Maximum iterations.
+        eps: Convergence threshold.
+
+    Returns:
+        Filtered BGR image (uint8).
+    """
+    # Convert BGR to LAB
+    lab = cv.cvtColor(image, cv.COLOR_BGR2LAB)
+    lab_filtered = np.zeros_like(lab)
+    # Apply mean-shift to each channel independently (L, A, B)
+    for c in range(3):
+        lab_filtered[..., c] = MeanShiftFilterGrayscale(lab[..., c], hs, hr, max_iter, eps)
+    # Convert back to BGR
+    return cv.cvtColor(lab_filtered, cv.COLOR_LAB2BGR)
+
+@njit
+def MeanShiftFilterGrayscale(image, hs, hr, max_iter=5, eps=1.0):
+    h, w = image.shape
+    image_f = image.astype(np.float32)
+    output = np.zeros_like(image_f)
+
+    kernel_size = 2 * hs + 1
+    spatial_kernel = np.zeros((kernel_size, kernel_size), dtype=np.float32)
+    for i in range(kernel_size):
+        for j in range(kernel_size):
+            dy = i - hs
+            dx = j - hs
+            spatial_kernel[i, j] = np.exp(-(dx**2 + dy**2) / (2 * hs**2))
+
+    for i in range(h):
+        for j in range(w):
+            xc, yc = j, i
+            vc = image_f[i, j]
+            for _ in range(max_iter):
+                x_min = int(max(xc - hs, 0))
+                x_max = int(min(xc + hs + 1, w))
+                y_min = int(max(yc - hs, 0))
+                y_max = int(min(yc + hs + 1, h))
+                window = image_f[y_min:y_max, x_min:x_max]
+
+                sk_y0 = int(hs - (yc - y_min))
+                sk_y1 = sk_y0 + (y_max - y_min)
+                sk_x0 = int(hs - (xc - x_min))
+                sk_x1 = sk_x0 + (x_max - x_min)
+                sk = spatial_kernel[sk_y0:sk_y1, sk_x0:sk_x1]
+
+                weights = np.empty_like(window)
+                for wi in range(window.shape[0]):
+                    for wj in range(window.shape[1]):
+                        dv = window[wi, wj] - vc
+                        weights[wi, wj] = sk[wi, wj] * np.exp(- (dv * dv) / (2 * hr * hr))
+
+                total_weight = np.sum(weights)
+                if total_weight < 1e-5:
+                    break
+
+                mean_x = 0.0
+                mean_y = 0.0
+                mean_v = 0.0
+                for wi in range(window.shape[0]):
+                    for wj in range(window.shape[1]):
+                        px = x_min + wj
+                        py = y_min + wi
+                        w_ = weights[wi, wj]
+                        mean_x += w_ * px
+                        mean_y += w_ * py
+                        mean_v += w_ * window[wi, wj]
+                mean_x /= total_weight
+                mean_y /= total_weight
+                mean_v /= total_weight
+
+                shift = np.sqrt((mean_x - xc)**2 + (mean_y - yc)**2 + (mean_v - vc)**2)
+                xc, yc, vc = mean_x, mean_y, mean_v
+
+                if shift < eps:
+                    break
+
+            output[i, j] = vc
+
+    return np.clip(output, 0, 255).astype(np.uint8)
 
 def NonLocalMeans(I, window_size, search_size, sigma):
     """
@@ -1759,6 +1911,56 @@ def GaussianFilterBGR(img, sigma):
 
     # Convert the smoothed image back to uint8
     return (img_smoothed * 255).astype(np.uint8)
+
+def AnisotropicDiffusion(img, num_iter=15, k=15, lamb=0.25, option=1):
+    """
+    Realiza difusión anisotrópica (Perona-Malik) en una imagen en escala de grises.
+
+    Parámetros:
+    - img: imagen de entrada (2D numpy array, escala de grises).
+    - num_iter: número de iteraciones.
+    - k: parámetro de sensibilidad a los bordes.
+    - lambda_val: coeficiente de difusión (0 < lambda <= 0.25).
+    - option: tipo de función conductiva (1 = exponencial, 2 = racional).
+
+    Devuelve:
+    - Imagen suavizada.
+    """
+    img = img.astype(np.float32)
+    for _ in range(num_iter):
+        # Gradientes en las 4 direcciones cardinales
+        north = np.zeros_like(img)
+        south = np.zeros_like(img)
+        east = np.zeros_like(img)
+        west = np.zeros_like(img)
+
+        north[1:, :] = img[:-1, :] - img[1:, :]
+        south[:-1, :] = img[1:, :] - img[:-1, :]
+        east[:, :-1] = img[:, 1:] - img[:, :-1]
+        west[:, 1:] = img[:, :-1] - img[:, 1:]
+
+        # Función conductiva
+        if option == 1:
+            c_n = np.exp(-(north / k)**2)
+            c_s = np.exp(-(south / k)**2)
+            c_e = np.exp(-(east / k)**2)
+            c_w = np.exp(-(west / k)**2)
+        elif option == 2:
+            c_n = 1.0 / (1.0 + (north / k)**2)
+            c_s = 1.0 / (1.0 + (south / k)**2)
+            c_e = 1.0 / (1.0 + (east / k)**2)
+            c_w = 1.0 / (1.0 + (west / k)**2)
+        else:
+            raise ValueError("option debe ser 1 (exp) o 2 (racional)")
+
+        # Actualización
+        img += lamb * (
+            c_n * north +
+            c_s * south +
+            c_e * east +
+            c_w * west
+        )
+    return img.clip(0, 255).astype(np.uint8) if img.max() <= 255 else img.clip(0, 1)
 
 # ---------------------------------
 #                                   #
