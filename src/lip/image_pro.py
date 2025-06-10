@@ -1587,9 +1587,75 @@ def MeanShiftFilterBGR(image, hs, hr, max_iter=5, eps=1.0):
     lab_filtered = np.zeros_like(lab)
     # Apply mean-shift to each channel independently (L, A, B)
     for c in range(3):
-        lab_filtered[..., c] = MeanShiftFilterGrayscale(lab[..., c], hs, hr, max_iter, eps)
+        lab_filtered[..., c] = MeanShiftFilterGrayscale1(lab[..., c], hs, hr, max_iter, eps)
     # Convert back to BGR
     return cv.cvtColor(lab_filtered, cv.COLOR_LAB2BGR)
+
+def MeanShiftFilterGrayscale1(image, hs, hr, max_iter=5, eps=1.0):
+    """
+    Mean-Shift filtering para imágenes en escala de grises.
+    """
+    h, w = image.shape
+    image_f = image.astype(np.float32)
+    output = np.zeros_like(image_f)
+
+    # Precalcular kernel espacial (gaussiano)
+    kernel_size = 2 * hs + 1
+    y_idx = np.arange(kernel_size) - hs
+    x_idx = np.arange(kernel_size) - hs
+    y_grid, x_grid = np.meshgrid(y_idx, x_idx, indexing='ij')
+    spatial_kernel = np.exp(-(x_grid**2 + y_grid**2) / (2 * hs**2)).astype(np.float32)
+
+    for i in range(h):
+        for j in range(w):
+            xc, yc, vc = j, i, image_f[i, j]
+            for _ in range(max_iter):
+                # Calcular bordes de la ventana
+                x_min = max(int(xc - hs), 0)
+                x_max = min(int(xc + hs + 1), w)
+                y_min = max(int(yc - hs), 0)
+                y_max = min(int(yc + hs + 1), h)
+
+                window = image_f[y_min:y_max, x_min:x_max]
+
+                # Extraer la porción correspondiente del kernel espacial
+                sk_y0 = int(hs - (yc - y_min))
+                sk_x0 = int(hs - (xc - x_min))
+                sk_y1 = sk_y0 + window.shape[0]
+                sk_x1 = sk_x0 + window.shape[1]
+                sk = spatial_kernel[sk_y0:sk_y1, sk_x0:sk_x1]
+
+                # --- Asegurar shapes iguales ---
+                if sk.shape != window.shape:
+                    min_shape = (min(sk.shape[0], window.shape[0]), min(sk.shape[1], window.shape[1]))
+                    sk = sk[:min_shape[0], :min_shape[1]]
+                    window = window[:min_shape[0], :min_shape[1]]
+                # --------------------------------
+
+                # Calcular pesos rango y totales (vectorizado)
+                range_weights = np.exp(-((window - vc) ** 2) / (2 * hr * hr))
+                weights = sk * range_weights
+                total_weight = np.sum(weights)
+                if total_weight < 1e-5:
+                    break
+
+                # Calcular nueva media ponderada (vectorizado)
+                wy = np.arange(y_min, y_min + window.shape[0])[:, None]
+                wx = np.arange(x_min, x_min + window.shape[1])[None, :]
+
+                mean_x = np.sum(weights * wx) / total_weight
+                mean_y = np.sum(weights * wy) / total_weight
+                mean_v = np.sum(weights * window) / total_weight
+
+                shift = np.sqrt((mean_x - xc) ** 2 + (mean_y - yc) ** 2 + (mean_v - vc) ** 2)
+                xc, yc, vc = mean_x, mean_y, mean_v
+
+                if shift < eps:
+                    break
+
+            output[i, j] = vc
+
+    return np.clip(output, 0, 255).astype(np.uint8)
 
 @njit
 def MeanShiftFilterGrayscale(image, hs, hr, max_iter=5, eps=1.0):

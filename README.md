@@ -8,6 +8,8 @@ If you're interested in learning more about image processing techniques, the alg
 
 [Learn Image Processing - Medium Page](https://medium.com/@fjzavala/list/image-processing-ae410f2c03c1)
 
+[Fundamentals of Image Processing and Computer Vision](https://medium.com/@fjzavala/fundamentals-of-image-processing-and-computer-vision-6ba4bc8cc4b4)
+
 [Image histogram analysis.](https://medium.com/@fjzavala/image-histogram-analysis-e2f65635309d)
 
 [Image histogram equalization algorithm.](https://medium.com/@fjzavala/image-histogram-equalization-algorithm-f9be303b04be)
