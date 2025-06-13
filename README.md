@@ -22,6 +22,8 @@ If you're interested in learning more about image processing techniques, the alg
 
 [Convolution and Gaussian Filters: Theory and Applications in Digital Images.](https://medium.com/@fjzavala/gradient-and-second-derivative-in-images-fundamentals-and-efficient-applications-46832da5c75f)
 
+[Gradient and Second Derivative in Images: ](https://medium.com/imagecraft/gradient-and-second-derivative-in-images-fundamentals-and-efficient-applications-46832da5c75f)
+
 [Nonlinear Filters in Image Processing.](https://medium.com/imagecraft/nonlinear-filters-in-image-processing-18bb01720983)
 
 ---
