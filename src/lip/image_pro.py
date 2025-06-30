@@ -2135,3 +2135,113 @@ def HysteresisThreshold(image, T_low, T_high):
                 flood_fill(weak_edges, x, y, visited)  # Expande bordes fuertes
     
     return weak_edges  # Retorna la imagen binaria con los bordes confirmados
+
+
+# ---------------------------------#                                 
+#   Fourier Transform functions    #
+#                                  #
+# ---------------------------------#
+
+
+def FourierTransform2D(image):
+    """
+    Computes the 2D Fourier Transform of an image step by step
+    using two 1D FFTs: first along rows, then along columns.
+    
+    Parameters:
+    - image: Input image (2D numpy array).
+    
+    Returns:
+    - 2D Fourier Transform of the image.
+    """
+    # First, apply FFT along the rows (axis=1)
+    fft_rows = np.fft.fft(image, axis=1)
+    
+    # Then, apply FFT along the columns (axis=0)
+    fft2d = np.fft.fft(fft_rows, axis=0)
+    
+    return fft2d
+
+def SlowFourier2D(image):
+    """
+    Computes the 2D Discrete Fourier Transform (DFT) of a grayscale image using the direct definition.
+
+    This implementation follows the mathematical formula for the 2D DFT:
+
+        F(u, v) = ∑∑ f(x, y) · exp(-j·2π·(ux/M + vy/N))
+
+    where:
+        - f(x, y) is the pixel value at coordinates (x, y),
+        - M and N are the image dimensions,
+        - u and v are the frequency domain coordinates.
+
+    Parameters:
+        image (2D numpy array): Grayscale input image.
+
+    Returns:
+        2D numpy array of complex numbers: The frequency-domain representation of the image.
+
+    Notes:
+        - This is a very slow implementation with time complexity O(N^4).
+        - Intended for educational purposes only. For practical use, prefer numpy.fft.fft2().
+    """
+    M, N = image.shape
+    output = np.zeros((M, N), dtype=complex)
+
+    for u in range(M):
+        for v in range(N):
+            sum_real = 0.0
+            sum_imag = 0.0
+            for x in range(M):
+                for y in range(N):
+                    angle = -2 * np.pi * ((u * x / M) + (v * y / N))
+                    e = np.exp(1j * angle)
+                    sum_real += image[x, y] * e.real
+                    sum_imag += image[x, y] * e.imag
+            output[u, v] = sum_real + 1j * sum_imag
+
+    return output
+
+def ComputeFourierSpectra(image):
+    """
+    Computes and returns the magnitude and phase spectra of a 2D Fourier Transform.
+
+    This function takes a grayscale image as input, applies the 2D Fourier Transform,
+    and returns both the magnitude and phase spectra. The magnitude spectrum is 
+    log-scaled and normalized to enhance visibility, while the phase spectrum is also 
+    normalized to the 0–255 range for visualization purposes.
+
+    Parameters:
+    ----------
+    image : np.ndarray
+        2D numpy array representing a grayscale image (real-valued input).
+
+    Returns:
+    -------
+    magnitude : np.ndarray
+        2D array (uint8) representing the normalized log-magnitude spectrum.
+
+    phase : np.ndarray
+        2D array (uint8) representing the normalized phase spectrum in the range [0, 255].
+
+    Notes:
+    -----
+    - The function assumes the input is a 2D image.
+    - Zero-frequency components are shifted to the center using `np.fft.fftshift`.
+    - The Fourier transform is computed using a custom implementation `FourierTransform2D`.
+    """
+    dft = FourierTransform2D(image)
+
+    # Compute magnitude and apply log-scaling
+    magnitude = np.abs(dft)
+    magnitude = np.log1p(magnitude)  # log(1 + |F(u,v)|)
+    magnitude = np.fft.fftshift(magnitude)
+    magnitude = (magnitude / np.max(magnitude) * 255).astype(np.uint8)
+
+    # Compute and normalize phase
+    phase = np.angle(dft)
+    phase = np.fft.fftshift(phase)
+    phase = (phase + np.pi) / (2 * np.pi) * 255  # Normalize to [0, 255]
+    phase = phase.astype(np.uint8)
+
+    return magnitude, phase

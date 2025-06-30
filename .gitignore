@@ -2,3 +2,5 @@ src/img/
 src/lip/__pycache__/
 /basura
 /next_pro
+src/img_data/
+src/*.png
