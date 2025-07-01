@@ -26,6 +26,7 @@ If you're interested in learning more about image processing techniques, the alg
 
 [Nonlinear Filters in Image Processing.](https://medium.com/imagecraft/nonlinear-filters-in-image-processing-18bb01720983)
 
+[Fundamentals of Image Processing in the Frequency Domain](https://medium.com/imagecraft/fundamentals-of-image-processing-in-the-frequency-domain-ce9ec830181d)
 ---
 
 ## Build & Run

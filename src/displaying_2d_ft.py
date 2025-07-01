@@ -41,11 +41,6 @@ plt.axis('off')
 # Step 6: Center the spectrum (move DC to the center)
 log_magnitude_shifted = np.fft.fftshift(log_magnitude)
 
-cv2.imshow("Centered Log(Magnitude)", log_magnitude_shifted)
-cv2.waitKey(0)
-cv2.destroyAllWindows()
-#log_magnitude_shifted = cv2.normalize(log_magnitude_shifted, None, 0, 255, cv2.NORM_MINMAX)
-
 plt.subplot(1, 4, 3)
 plt.title("Centered Log(Magnitude)")
 plt.imshow(log_magnitude_shifted, cmap='gray')
