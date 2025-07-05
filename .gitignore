@@ -4,3 +4,5 @@ src/lip/__pycache__/
 /next_pro
 src/img_data/
 src/*.png
+/src/*.jpg
+/src/*.jpeg

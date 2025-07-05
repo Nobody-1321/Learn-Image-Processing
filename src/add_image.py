@@ -3,9 +3,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # Cargar las imágenes
-img1 = cv.imread("img_data/flash_ambient/3_ambient.jpeg")
-img2 = cv.imread("img_data/flash_ambient/3_flash.jpeg")
-img3 = cv.imread("img_data/flash_ambient/enhanced_image_3.png")
+img2 = cv.imread("img_data/flash_ambient/7_ambient.jpg")
+img2 = cv.resize(img2, (0, 0), fx=0.3, fy=0.3)  # Redimensionar para que coincida con el tamaño de la imagen flash
+img1 = cv.imread("img_data/flash_ambient/7_flash.jpg")
+img1 = cv.resize(img1, (0, 0), fx=0.3, fy=0.3)  # Redimensionar para que coincida con el tamaño de la imagen ambient
+img3 = cv.imread("enhanced_image.png")
 
 # Comprobar si las imágenes se cargaron correctamente
 if img1 is None or img2 is None or img3 is None:
@@ -34,4 +36,4 @@ cv.waitKey(0)
 cv.destroyAllWindows()
 
 # Guardar resultado
-cv.imwrite("hstack_3.jpg", vertical_image)
+cv.imwrite("hstack_4.jpg", vertical_image)

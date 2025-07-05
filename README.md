@@ -27,6 +27,10 @@ If you're interested in learning more about image processing techniques, the alg
 [Nonlinear Filters in Image Processing.](https://medium.com/imagecraft/nonlinear-filters-in-image-processing-18bb01720983)
 
 [Fundamentals of Image Processing in the Frequency Domain](https://medium.com/imagecraft/fundamentals-of-image-processing-in-the-frequency-domain-ce9ec830181d)
+
+[Enhancing Low-Light Photography: Fusion of Flash and No-Flash Images](https://medium.com/imagecraft/enhancing-low-light-photography-fusion-of-flash-and-no-flash-images-234128c6bc86)
+
+
 ---
 
 ## Build & Run
@@ -58,6 +62,8 @@ If you want to dive deeper into image processing, here are some great books, web
 
 
 ### Research Papers  
+- Georg Petschnigg, Richard Szeliski, Maneesh Agrawala, Michael Cohen, Hugues Hoppe, and Kentaro Toyama. 2004. Digital photography with flash and no-flash image pairs.
+
 ---
 
 ## Support and Feedback  
