@@ -3,7 +3,7 @@ import numpy as np
 from scipy.ndimage import gaussian_filter
 from scipy.special import factorial 
 from collections import deque
-from scipy.ndimage import convolve1d
+from scipy.ndimage import convolve1d, zoom, sobel
 from scipy.special import comb
 from numba import njit
 
@@ -1164,34 +1164,6 @@ def SobelOperator(image):
 
     return Gx.astype(np.uint8), Gy.astype(np.uint8), G.astype(np.uint8) , Gphase.astype(np.uint8)
 
-def ScharOperator(image):
-        # Definir los kernels de Sobel
-    Schar_x = np.array([[-3, 0, 3], 
-                         [-10, 0, 10], 
-                         [-3, 0, 3]], dtype=np.float32)
-
-    Schar_y = np.array([[ 3, 10,  3], 
-                         [0,  0,  0], 
-                         [-3,  -10,  -3]], dtype=np.float32)
-
-    Schar_x = Schar_x * 1/32
-    Schar_y = Schar_y * 1/32
-
-    # Aplicar la convolución con los filtros de Sobel
-
-    Gx = cv.filter2D(image, cv.CV_32F, Schar_x)
-    Gy = cv.filter2D(image, cv.CV_32F, Schar_y)
-
-    # Calcular la magnitud del gradiente
-    G = np.sqrt(Gx**2 + Gy**2)
-
-    # Normalizar para visualización
-    Gx = cv.normalize(Gx, None, 0, 255, cv.NORM_MINMAX)
-    Gy = cv.normalize(Gy, None, 0, 255, cv.NORM_MINMAX)
-    G = cv.normalize(G, None, 0, 255, cv.NORM_MINMAX)
-
-    return Gx, Gy, G
-
 def ComputeLaplacianGaussian(img, sigma_s, sigma_d):
     """
     Compute the Laplacian of Gaussian using separable convolution.
@@ -1229,7 +1201,8 @@ def ComputeImageGradient(img, sigma_s, sigma_d):
     Returns:
     - Gx: The gradient image in the X direction.
     - Gy: The gradient image in the Y direction.
-    - G: The magnitude of the gradient.
+    - Gmag: The magnitude of the gradient.
+    - Gphase: The phase of the gradient (direction).
     """
     # convertir a 32 bits y normalizar
     
@@ -1247,6 +1220,7 @@ def ComputeImageGradient(img, sigma_s, sigma_d):
     # Step 3: Compute the magnitude and phase of the gradient
     Gmag = np.sqrt(Gx**2 + Gy**2)  # Gradient magnitude
     Gphase = np.arctan2(Gy, Gx)    # Gradient phase (direction)
+    #guarda en archivo la magnitud con numpa
 
     # Normalize for visualization
     Gx = cv.normalize(Gx, None, 0, 255, cv.NORM_MINMAX)
@@ -1451,67 +1425,6 @@ def MeanShiftFilter(I, hs, hr, max_iter=10, epsilon=1e-3):
             Ir[y, x] = vr
 
     return np.clip(Ir, 0, 255).astype(np.uint8)
-
-'''
-def median_filter_grayscale_histogram(image, window_size):
-    """
-    Optimized median filter for grayscale images using histogram-based approach.
-
-    Parameters:
-    - image: 2D NumPy array (grayscale).
-    - window_size: Odd integer size of the square window.
-
-    Returns:
-    - Median filtered image as NumPy array.
-    """
-    if window_size % 2 == 0:
-        raise ValueError("Window size must be odd.")
-
-    pad = window_size // 2
-    padded_image = np.pad(image, pad, mode='edge')
-    height, width = image.shape
-    filtered_image = np.zeros_like(image, dtype=np.uint8)
-
-    max_val = 256  # para imágenes en uint8
-    window_area = window_size * window_size
-    median_pos = (window_area // 2) + 1
-
-    for y in range(height):
-        hist = np.zeros(max_val, dtype=int)
-
-        # Inicializar histograma para la primera ventana
-        for dy in range(window_size):
-            for dx in range(window_size):
-                pixel_val = padded_image[y + dy, dx]
-                hist[pixel_val] += 1
-
-        def get_median(hist):
-            cumulative = 0
-            for value in range(max_val):
-                cumulative += hist[value]
-                if cumulative >= median_pos:
-                    return value
-            return 0  # fallback (no debería ocurrir)
-
-        filtered_image[y, 0] = get_median(hist)
-
-        # Deslizar la ventana horizontalmente y actualizar histograma
-        for x in range(1, width):
-            for dy in range(window_size):
-                left_val = padded_image[y + dy, x - 1]
-                right_val = padded_image[y + dy, x - 1 + window_size]
-                hist[left_val] -= 1
-                hist[right_val] += 1
-            filtered_image[y, x] = get_median(hist)
-
-    return filtered_image
-
-def median_filter_bgr_histogram(image, window_size):
-    filtered = np.zeros_like(image)
-    for c in range(3):
-        filtered[:, :, c] = median_filter_grayscale_histogram(image[:, :, c], window_size)
-    return filtered
-'''
 
 def MedianFilterGrayscale(image, window_size):
     """
@@ -2136,12 +2049,10 @@ def HysteresisThreshold(image, T_low, T_high):
     
     return weak_edges  # Retorna la imagen binaria con los bordes confirmados
 
-
 # ---------------------------------#                                 
 #   Fourier Transform functions    #
 #                                  #
 # ---------------------------------#
-
 
 def FourierTransform2D(image):
     """
@@ -2245,3 +2156,193 @@ def ComputeFourierSpectra(image):
     phase = phase.astype(np.uint8)
 
     return magnitude, phase
+
+# --------------------------------- #
+#                                   #
+#   Edge detection functions        #
+#                                   #
+# --------------------------------- #
+
+def GaussianPyramid(image, levels=5, factor=2):
+    """
+    Applies Gaussian smoothing and downsampling to an image, constructing a Gaussian pyramid.
+    Args:
+        image (np.ndarray): Input image to be processed.
+        levels (int, optional): Number of pyramid levels to generate. Default is 5.
+        factor (int or float, optional): Downsampling factor between levels. Default is 2.
+    Returns:
+        list of np.ndarray: List containing the images at each level of the pyramid, starting with the original image.
+    Notes:
+        - Requires `lip.ConvolveSeparableOpt` for Gaussian smoothing and `zoom` for downsampling.
+        - `gaussian_kernel_1d` must be defined and provided for the convolution.
+    """
+    gaussian_kernel_1d = np.array([0.25, 0.5, 0.25])
+    pyramid = [image]
+    current = image.copy()
+    
+    for i in range(1, levels):
+        
+        # Smooth the current image using the Gaussian kernel
+        smoothed = ConvolveSeparableOpt(current, gaussian_kernel_1d, gaussian_kernel_1d)
+        
+        # Downsample the smoothed image
+        # Using zoom from scipy to downsample the image by the specified factor
+        # The order=1 corresponds to bilinear interpolation
+        # This is a common choice for downsampling to avoid aliasing artifacts
+        downsampled = zoom(smoothed, zoom=1/factor, order=1)
+        pyramid.append(downsampled)
+        current = downsampled
+
+    return pyramid
+
+def LaplacianGaussianPyramid(image, levels=5, factor=2, sigma=1.0):
+    """
+    Applies Gaussian smoothing and downsampling to an image, constructing a Gaussian pyramid.
+    Args:
+        image (np.ndarray): Input image to be processed.
+        levels (int, optional): Number of pyramid levels to generate. Default is 5.
+        factor (int or float, optional): Downsampling factor between levels. Default is 2.
+    Returns:
+        list of np.ndarray: List containing the images at each level of the pyramid, starting with the original image.
+    Notes:
+        - Requires `lip.ConvolveSeparableOpt` for Gaussian smoothing and `zoom` for downsampling.
+        - `gaussian_kernel_1d` must be defined and provided for the convolution.
+    """
+    pyramid = []
+    current = image.copy()
+    
+    for i in range(0, levels):
+        
+        # Smooth the current image using the Gaussian kernel
+        smoothed = ComputeLaplacianGaussian(current, sigma, sigma)
+        
+        # Downsample the smoothed image
+        # Using zoom from scipy to downsample the image by the specified factor
+        # The order=1 corresponds to bilinear interpolation
+        # This is a common choice for downsampling to avoid aliasing artifacts
+        downsampled = zoom(smoothed, zoom=1/factor, order=1)
+        pyramid.append(downsampled)
+        current = downsampled
+
+    return pyramid
+
+def NonMaxSuppression(Gmag, Gphase):
+    """
+    Applies non-maximum suppression to the gradient magnitude image.
+
+    Parameters:
+        Gmag (numpy.ndarray): Gradient magnitude image.
+        Gphase (numpy.ndarray): Gradient phase image (in radians).
+
+    Returns:
+        numpy.ndarray: Gradient magnitude image with non-local maxima suppressed.
+    """
+    # Convert phase angles to degrees for easier comparison
+    Gphase = np.rad2deg(Gphase) % 180  # Normalize phase to [0, 180)
+
+    # Initialize the output image
+    Glocalmax = np.zeros_like(Gmag, dtype=np.float32)
+
+    # Get image dimensions
+    rows, cols = Gmag.shape
+
+    for x in range(1, rows - 1):
+        for y in range(1, cols - 1):
+            # Get the gradient direction at the current pixel
+            u = Gphase[x, y]
+
+            # Determine the neighbors based on the gradient direction
+            if (0 <= u < 22.5) or (157.5 <= u <= 180):  # Horizontal edge
+                neigh1 = Gmag[x, y - 1]
+                neigh2 = Gmag[x, y + 1]
+            elif 22.5 <= u < 67.5:  # Diagonal edge (top-left to bottom-right)
+                neigh1 = Gmag[x - 1, y - 1]
+                neigh2 = Gmag[x + 1, y + 1]
+            elif 67.5 <= u < 112.5:  # Vertical edge
+                neigh1 = Gmag[x - 1, y]
+                neigh2 = Gmag[x + 1, y]
+            elif 112.5 <= u < 157.5:  # Diagonal edge (top-right to bottom-left)
+                neigh1 = Gmag[x - 1, y + 1]
+                neigh2 = Gmag[x + 1, y - 1]
+
+            # Suppress non-local maxima
+            if Gmag[x, y] >= neigh1 and Gmag[x, y] >= neigh2:
+                Glocalmax[x, y] = Gmag[x, y]
+            else:
+                Glocalmax[x, y] = 0
+
+    return Glocalmax
+
+def NonMaximumSuppressionSubpixel(Gx: np.ndarray, Gy: np.ndarray, Gmag: np.ndarray) -> np.ndarray:
+    rows, cols = Gmag.shape
+    output = np.zeros_like(Gmag, dtype=np.float32)
+
+    for i in range(1, rows - 1):
+        for j in range(1, cols - 1):
+            gx, gy = Gx[i, j], Gy[i, j]
+            mag = Gmag[i, j]
+            if gx == 0 and gy == 0:
+                continue
+            norm = np.hypot(gx, gy)
+            dx, dy = gx / norm, gy / norm
+
+            def interp(y, x):
+                x0, y0 = int(x), int(y)
+                x1 = min(x0 + 1, cols - 1)
+                y1 = min(y0 + 1, rows - 1)
+                a, b = x - x0, y - y0
+                return (
+                    Gmag[y0, x0] * (1 - a) * (1 - b) +
+                    Gmag[y0, x1] * a * (1 - b) +
+                    Gmag[y1, x0] * (1 - a) * b +
+                    Gmag[y1, x1] * a * b
+                )
+
+            mag1 = interp(i + dy, j + dx)
+            mag2 = interp(i - dy, j - dx)
+
+            if mag >= mag1 and mag >= mag2:
+                output[i, j] = mag
+    return output
+
+def HysteresisThresholdFIFO(image, T_high, T_low):
+    h, w = image.shape
+    strong = (image >= T_high)
+    weak = (image >= T_low) & ~strong
+    result = np.zeros_like(image, dtype=np.uint8)
+    queue = deque()
+
+    for y in range(h):
+        for x in range(w):
+            if strong[y, x]:
+                result[y, x] = 255
+                queue.append((x, y))
+
+    directions = [(-1, -1), (-1, 0), (-1, 1),
+                  (0, -1),         (0, 1),
+                  (1, -1), (1, 0), (1, 1)]
+
+    while queue:
+        x, y = queue.popleft()
+        for dx, dy in directions:
+            nx, ny = x + dx, y + dy
+            if 0 <= nx < w and 0 <= ny < h:
+                if weak[ny, nx] and result[ny, nx] == 0:
+                    result[ny, nx] = 255
+                    queue.append((nx, ny))
+    return result
+
+def CannyLikeDetector(image: np.ndarray, sigma=1.0, tlow=0.1, thigh=0.3) -> np.ndarray:
+    
+    Gx, Gy, Gmag, Gphase = ComputeImageGradient(image, sigma_s=sigma, sigma_d=sigma)
+    suppressed = NonMaximumSuppressionSubpixel(Gx, Gy, Gmag)
+
+    # Normalización post-supresión
+    norm_suppressed = np.clip((suppressed / suppressed.max()) * 255.0, 0, 255).astype(np.float32)
+
+    # Umbrales escalados
+    T_high = thigh * 255
+    T_low = tlow * 255
+
+    edges = HysteresisThresholdFIFO(norm_suppressed, T_high, T_low)
+    return edges
