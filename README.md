@@ -30,6 +30,7 @@ If you're interested in learning more about image processing techniques, the alg
 
 [Enhancing Low-Light Photography: Fusion of Flash and No-Flash Images](https://medium.com/imagecraft/enhancing-low-light-photography-fusion-of-flash-and-no-flash-images-234128c6bc86)
 
+[Canny edge detector: theory and implementation](https://medium.com/imagecraft/canny-edge-detector-theory-and-implementation-ffd31cd28e73)
 
 ---
 
