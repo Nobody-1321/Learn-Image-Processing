@@ -880,11 +880,121 @@ def connected_components_by_union_find_8_connected(image):
 
     return label_image
 
-# ---------------------------------
-#                                   #
-#   Convolution functions           #
-#                                   #
-# ---------------------------------
+# ------------------------------------
+#                                     #
+#   Convolution functions and kernels #
+#                                     #
+# ------------------------------------
+
+def CreateLanczosLowpassFilter(shape, cutoff_frequency, a=3):
+    """
+    Creates a Lanczos low-pass filter kernel in the frequency domain.
+
+    Parameters:
+        shape : tuple
+            Shape of the filter (rows, cols), typically matching the image dimensions.
+        cutoff_frequency : float
+            Frequency scaling factor (controls sharpness).
+        a : int
+            Lanczos window parameter (commonly 2 or 3). Larger values = narrower main lobe.
+
+    Returns:
+        filter_kernel : (np.ndarray)
+            Lanczos low-pass filter kernel as a 2D numpy array.
+    """
+    rows, cols = shape
+    crow, ccol = rows // 2, cols // 2
+
+    # Coordenadas relativas al centro
+    Y, X = np.ogrid[:rows, :cols]
+    dx = X - ccol
+    dy = Y - crow
+    radius = np.sqrt(dx**2 + dy**2)
+
+    # Normalizar el radio para hacerlo compatible con el parámetro a
+    x = (radius / cutoff_frequency).astype(np.float32)
+
+    # sinc(x) = sin(pi x) / (pi x), definida como 1 en x = 0
+    def sinc(z):
+        z = np.where(z == 0, 1e-8, z)  # evitar división por cero
+        return np.sin(np.pi * z) / (np.pi * z)
+
+    # Kernel de Lanczos en 2D: sinc(x) * sinc(x/a)
+    lanczos_kernel = sinc(x) * sinc(x / a)
+
+    # Forzar ceros fuera de la ventana a
+    lanczos_kernel[x > a] = 0
+
+    return lanczos_kernel.astype(np.float32)
+
+def CreateButterworthLowpassFilter(shape, cutoff_frequency, order):
+    """
+    Creates a Butterworth low-pass filter kernel in the frequency domain.
+
+    Parameters:
+        shape : tuple
+            Shape of the filter (rows, cols), typically matching the image dimensions.
+        cutoff_frequency : float
+            Cutoff frequency for the low-pass filter.
+        order : int
+            Order of the Butterworth filter, controlling the sharpness of the transition.
+
+    Returns:
+        filter_kernel : np.ndarray
+            Butterworth low-pass filter kernel as a 2D numpy array.
+    """
+    rows, cols = shape
+    crow, ccol = rows // 2, cols // 2
+    Y, X = np.ogrid[:rows, :cols]
+    distance = np.sqrt((X - ccol)**2 + (Y - crow)**2)
+    
+    # Butterworth low-pass filter formula
+    filter_kernel = 1 / (1 + (distance / (cutoff_frequency + 1e-5))**(2 * order))  # Avoid division by zero
+    return filter_kernel.astype(np.float32)
+
+def CreateGaussianLowpassFilter(shape, cutoff_frequency):
+    """
+    Creates a Gaussian low-pass filter kernel in the frequency domain.
+
+    Parameters:
+        shape : tuple
+            Shape of the filter (rows, cols), typically matching the image dimensions.
+        cutoff_frequency : float
+            Cutoff frequency for the low-pass filter.
+
+    Returns:
+        filter_kernel : np.ndarray
+            Gaussian low-pass filter kernel as a 2D numpy array.
+    """
+    rows, cols = shape
+    crow, ccol = rows // 2, cols // 2
+    Y, X = np.ogrid[:rows, :cols]
+    distance = np.sqrt((X - ccol)**2 + (Y - crow)**2)
+    
+    # Gaussian low-pass filter formula
+    filter_kernel = np.exp(-(distance**2) / (2 * (cutoff_frequency**2)))
+    return filter_kernel.astype(np.float32)
+
+def CreateIdealLowpassFilter(shape, cutoff_frequency):
+    """
+    Creates an ideal low-pass filter kernel in the frequency domain.
+
+    Parameters:
+        shape : (tuple) Shape of the filter (rows, cols), typically matching the image dimensions.
+        cutoff_frequency : (float) Cutoff frequency for the low-pass filter.
+
+    Returns:
+        filter_kernel : (np.ndarray) Ideal low-pass filter kernel as a 2D numpy array.
+    """
+
+    rows, cols = shape
+    crow, ccol = rows // 2, cols // 2
+    Y, X = np.ogrid[:rows, :cols]
+    distance = np.sqrt((X - ccol)**2 + (Y - crow)**2)
+    
+    # Ideal low-pass filter formula
+    filter_kernel = distance <= cutoff_frequency
+    return filter_kernel.astype(np.float32)
 
 def ConvolveSeparable(I, gh, gv):
     """
@@ -1362,11 +1472,53 @@ def AddSpeckleNoise(img, sigma):
     noisy_img = np.clip(noisy_img, 0, 255).astype(np.uint8)
     return noisy_img
 
-# ---------------------------------
+# --------------------------------- 
 #                                   #
-#    Filter functions               #
+#    Filter functions              #
 #                                   #
 # ---------------------------------
+
+def ApplyFrequencyDomainFilter(image, kernel):
+    """
+    Applies a frequency domain filter to a grayscale image.
+
+    This function computes the 2D Fourier Transform of the input image, applies the given filter 
+    in the frequency domain, and then performs the inverse Fourier Transform to return the filtered image.
+
+    Parameters:
+        image : np.ndarray
+            Input grayscale image (2D numpy array).
+
+        kernel : np.ndarray
+            Frequency domain filter (2D numpy array) with the same shape as the input image.
+
+    Returns:
+        filtered_image : np.ndarray
+            Filtered image (uint8) normalized to the range [0, 255].
+
+    Notes:
+    -----
+    - The input image is assumed to be in grayscale format.
+    - The kernel should be designed in the frequency domain and have the same dimensions as the input image.
+    - The output image is normalized to ensure proper visualization.
+    """
+    # Compute the 2D Fourier Transform of the image
+    f = np.fft.fft2(image)
+    fshift = np.fft.fftshift(f)  # Shift zero frequency to the center
+
+    # Apply the filter in the frequency domain
+    filtered_freq = fshift * kernel
+
+    # Compute the inverse Fourier Transform to return to the spatial domain
+    temp = np.abs(np.fft.ifft2(np.fft.ifftshift(filtered_freq)))
+
+    # Normalize the result to the range [0, 255] and convert to uint8
+    filtered_image = cv.normalize(temp, None, 0, 255, cv.NORM_MINMAX)
+    filtered_image = np.uint8(filtered_image)
+
+    return filtered_image
+
+
 
 def MeanShiftFilter(I, hs, hr, max_iter=10, epsilon=1e-3):
     """
@@ -2060,10 +2212,10 @@ def FourierTransform2D(image):
     using two 1D FFTs: first along rows, then along columns.
     
     Parameters:
-    - image: Input image (2D numpy array).
+        image: Input image (2D numpy array).
     
     Returns:
-    - 2D Fourier Transform of the image.
+        2D Fourier Transform of the image.
     """
     # First, apply FFT along the rows (axis=1)
     fft_rows = np.fft.fft(image, axis=1)
@@ -2113,6 +2265,47 @@ def SlowFourier2D(image):
 
     return output
 
+def ComputeSpectraFromDFT(dft):
+    """
+    Computes and returns the magnitude and phase spectra from a 2D Fourier Transform.
+
+    This function takes a 2D Fourier Transform (complex-valued input) and computes:
+    The magnitude spectrum, which is log-scaled and normalized for visualization.
+    - The phase spectrum, normalized to the range [0, 255] for visualization.
+
+    Parameters:
+        dft : np.ndarray
+            2D numpy array representing the Fourier Transform of an image (complex-valued input).
+
+    Returns:
+        magnitude : np.ndarray
+            2D array (uint8) representing the normalized log-magnitude spectrum.
+
+        phase : np.ndarray
+            2D array (uint8) representing the normalized phase spectrum in the range [0, 255].
+
+    Notes:
+    -----
+    - The input `dft` is assumed to be the result of a 2D Fourier Transform.
+    - Zero-frequency components are shifted to the center using `np.fft.fftshift`.
+    - The magnitude spectrum is log-scaled to enhance visibility of low-intensity frequencies.
+    - The phase spectrum is normalized to the range [0, 255] for visualization purposes.
+    """
+
+    # Compute magnitude and apply log-scaling
+    magnitude = np.abs(dft)
+    magnitude = np.log1p(magnitude)  # log(1 + |F(u,v)|)
+    magnitude = np.fft.fftshift(magnitude)
+    magnitude = (magnitude / np.max(magnitude) * 255).astype(np.uint8)
+
+    # Compute and normalize phase
+    phase = np.angle(dft)
+    phase = np.fft.fftshift(phase)
+    phase = (phase + np.pi) / (2 * np.pi) * 255  # Normalize to [0, 255]
+    phase = phase.astype(np.uint8)
+
+    return magnitude, phase
+
 def ComputeFourierSpectra(image):
     """
     Computes and returns the magnitude and phase spectra of a 2D Fourier Transform.
@@ -2123,17 +2316,13 @@ def ComputeFourierSpectra(image):
     normalized to the 0–255 range for visualization purposes.
 
     Parameters:
-    ----------
-    image : np.ndarray
-        2D numpy array representing a grayscale image (real-valued input).
+        image : np.ndarray
+            2D numpy array representing a grayscale image (real-valued input).
 
     Returns:
-    -------
-    magnitude : np.ndarray
-        2D array (uint8) representing the normalized log-magnitude spectrum.
+        magnitude : np.ndarray 2D array (uint8) representing the normalized log-magnitude spectrum.
 
-    phase : np.ndarray
-        2D array (uint8) representing the normalized phase spectrum in the range [0, 255].
+        phase : np.ndarray 2D array (uint8) representing the normalized phase spectrum in the range [0, 255].
 
     Notes:
     -----
@@ -2156,6 +2345,7 @@ def ComputeFourierSpectra(image):
     phase = phase.astype(np.uint8)
 
     return magnitude, phase
+
 
 # --------------------------------- #
 #                                   #
@@ -2333,6 +2523,19 @@ def HysteresisThresholdFIFO(image, T_high, T_low):
     return result
 
 def CannyLikeDetector(image: np.ndarray, sigma=1.0, tlow=0.1, thigh=0.3) -> np.ndarray:
+    """
+    Performs edge detection on a single-channel (grayscale) image using a Canny-like algorithm.
+    This function computes image gradients, applies non-maximum suppression, normalizes the result,
+    and performs hysteresis thresholding to detect edges. The input image must be a 2D NumPy array
+    representing a grayscale image (i.e., with shape [height, width] and a single channel).
+    Parameters:
+        image (np.ndarray): Input grayscale image as a 2D NumPy array (single channel).
+        sigma (float, optional): Standard deviation for Gaussian smoothing in gradient computation. Default is 1.0.
+        tlow (float, optional): Lower threshold for hysteresis, as a fraction of 255. Default is 0.1.
+        thigh (float, optional): Higher threshold for hysteresis, as a fraction of 255. Default is 0.3.
+    Returns:
+        np.ndarray: Binary edge map as a 2D NumPy array of the same shape as the input image.
+    """
     
     Gx, Gy, Gmag, Gphase = ComputeImageGradient(image, sigma_s=sigma, sigma_d=sigma)
     suppressed = NonMaximumSuppressionSubpixel(Gx, Gy, Gmag)
