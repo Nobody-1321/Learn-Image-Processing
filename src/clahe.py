@@ -27,7 +27,7 @@ img = cv.imread("img_data/noct.jpeg", cv.IMREAD_GRAYSCALE)
 img = cv.resize(img, (720, 480), interpolation=cv.INTER_AREA)
 
 # Apply Histogram Equalization (global contrast enhancement)
-img_equ = lip.HistogramEqualization(img)
+img_equ = lip.HistogramEqualizationGray(img)
 
 # Apply CLAHE (Contrast Limited Adaptive Histogram Equalization)
 # CLAHE enhances contrast locally in small regions while preventing over-amplification
@@ -57,7 +57,7 @@ img = cv.imread("img_data/ciervo.jpg")
 img = cv.resize(img, (720, 480), interpolation=cv.INTER_AREA)
 
 # Apply Histogram Equalization to enhance contrast globally
-img_equa = lip.HistogramEqualization(img)
+img_equa = lip.HistogramEqualizationRGB(img)
 
 # Apply CLAHE to the color image (performs local contrast enhancement)
 img_clahe = lip.HistogramEqualizationClaheRGB(img, clip_limit=17, grid_size=(9, 9))
