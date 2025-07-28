@@ -32,6 +32,8 @@ If you're interested in learning more about image processing techniques, the alg
 
 [Canny edge detector: theory and implementation](https://medium.com/imagecraft/canny-edge-detector-theory-and-implementation-ffd31cd28e73)
 
+[Frequency-Domain Filtering: Fundamentals and Applications](https://medium.com/p/36a29924c4df)
+
 ---
 
 ## Build & Run

@@ -6,3 +6,4 @@ src/img_data/
 src/*.png
 /src/*.jpg
 /src/*.jpeg
+/src/*NO.py

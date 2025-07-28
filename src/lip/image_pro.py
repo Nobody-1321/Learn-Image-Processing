@@ -58,11 +58,12 @@ def open_image(path):
     Opens an image from the specified file path.
 
     Parameters:
-    path (str): The file path to the image.
+        path (str): The file path to the image.
 
     Returns:
-    img: The image read from the file path.
+        img: The image read from the file path.
     """
+
     img = cv.imread(path)
     return img
     
@@ -187,6 +188,13 @@ def ClipHistogram(hist, clip_limit):
     """
     Clips the histogram by limiting each bin to the clip_limit and redistributes
     the clipped amount uniformly among all the bins.
+
+    Parameters:
+        hist (numpy.ndarray): The histogram to be clipped.
+        clip_limit (int): The maximum allowed value for each histogram bin.
+    
+    Returns:
+        numpy.ndarray: The clipped histogram with redistributed excess.
     """
     excess = hist - clip_limit
     excess[excess < 0] = 0
@@ -213,6 +221,13 @@ def CreateMapping(hist, block_size):
     """
     Calculates the mapping function (lookup table) from the clipped histogram
     using the cumulative distribution function (CDF).
+
+    Parameters:
+        hist (numpy.ndarray): The clipped histogram.
+        block_size (int): The total number of pixels in the block.
+
+    Returns:
+        numpy.ndarray: The mapping function that maps pixel intensities to new values.
     """
     cdf = np.cumsum(hist)
     # Avoid division by zero: find the first non-zero value
@@ -536,6 +551,7 @@ def BihistogramEqualizationGrayscale(image):
 #                                  #
 #   Image Negative                 #
 #                                  #
+#- ---------------------------------
 
 def ImageNegative(img):
     """
@@ -603,26 +619,27 @@ def BgrToGray(img):
     # Convert back to 8-bit integer format
     return gray_img.astype(np.uint8)
 
-# ---------------------------------
+# -----------------------------------
 #                                   #
-#   lebaling functions an connected #
-#   components                      #
+#  Labeling functions and connected #
+#  components                       #
 #                                   #
-# ---------------------------------
+# -----------------------------------
 
 def floodfill_separate_output(I, O, p, new_color):
     """
     Perform a flood fill on an output image O without modifying the original image I.
 
     Parameters:
-    I (numpy.ndarray): The original input image.
-    O (numpy.ndarray): The output image to be modified.
-    p (tuple): The starting point (x, y) for the flood fill.
-    new_color (int or tuple): The new color to apply to the filled area.
+        I numpy.ndarray : The original input image.
+        O numpy.ndarray : The output image to be modified.
+        p tuple : The starting point (x, y) for the flood fill.
+        new_color (int or tuple): The new color to apply to the filled area.
 
     Returns:
-    None
+        None
     """
+
     """Flood Fill en una imagen de salida O sin modificar la imagen original I"""
     orig_color = I[p[1], p[0]]
     if orig_color == 0:  # Evita llenar el fondo (asumimos fondo en 0)
@@ -671,9 +688,9 @@ def FloodFillDFS(img, seed, new_color):
     Flood Fill Algorithm using Depth-First Search (DFS).
 
     Parameters:
-    - img: np.ndarray -> A grayscale or binary image (pixel matrix).
-    - seed: tuple -> Coordinates (x, y) of the seed pixel.
-    - new_color: int -> The color that the connected region will be filled with.
+        img: np.ndarray -> A grayscale or binary image (pixel matrix).
+        seed: tuple -> Coordinates (x, y) of the seed pixel.
+        new_color: int -> The color that the connected region will be filled with.
 
     This function modifies the original image by changing the color of the region connected to the seed pixel.
     """
@@ -710,10 +727,13 @@ def FloodFillBFS(img: np.ndarray, seed: tuple, new_color: int):
     Flood Fill algorithm using Breadth-First Search (BFS).
     
     Parameters:
-    - img: np.ndarray -> Image in grayscale or binary (pixel matrix).
-    - seed: tuple -> Coordinates (x, y) of the seed pixel.
-    - new_color: int -> The color to fill the region with.
+        img: np.ndarray -> Image in grayscale or binary (pixel matrix).
+        seed: tuple -> Coordinates (x, y) of the seed pixel.
+        new_color: int -> The color to fill the region with.
     
+    Returns:
+        None:
+
     Modifies the original image by replacing the connected region starting from the seed pixel.
     """
     
@@ -798,11 +818,11 @@ def ConnectedComponentsByUnionFind(image):
     while the second pass resolves these equivalences using the Union-Find structure.
 
     Parameters:
-    image (numpy.ndarray): A 2D binary image where non-zero pixels represent foreground objects 
+        image (numpy.ndarray): A 2D binary image where non-zero pixels represent foreground objects 
                            and zero pixels represent the background.
 
     Returns:
-    numpy.ndarray: A 2D array of the same shape as the input image, where each connected component 
+        numpy.ndarray: A 2D array of the same shape as the input image, where each connected component 
                    is assigned a unique integer label.
     """
     height, width = image.shape
@@ -880,11 +900,193 @@ def connected_components_by_union_find_8_connected(image):
 
     return label_image
 
-# ------------------------------------
+# -------------------------------------
 #                                     #
-#   Convolution functions and kernels #
+#  Convolution functions and kernels  #
 #                                     #
-# ------------------------------------
+# -------------------------------------
+
+def HomomorphicFilter(img: np.ndarray, gammaL=0.5, gammaH=1.5, sigma=30):
+    """
+    Applies homomorphic filtering to a grayscale image in the frequency domain.
+
+    This method assumes that the image can be modeled as a product of illumination and reflectance:
+        E(x, y) = L(x, y) * R(x, y)
+    By applying a logarithm and Fourier transform, it separates these components and enhances reflectance
+    (details) while suppressing illumination variations (shadows, lighting gradients).
+
+    Parameters:
+        img (np.ndarray): Input 2D grayscale image (pixel values in range 0–255).
+        gammaL (float): Gain for low frequencies (illumination component). Should be < 1.
+        gammaH (float): Gain for high frequencies (reflectance component). Should be > 1.
+        sigma (float): Standard deviation of the Gaussian that controls the transition region.
+
+    Returns:
+        np.ndarray: Output image after homomorphic filtering (same shape as input, dtype uint8).
+    """
+
+    # Ensure image is in float32 for accurate processing
+    if img.dtype != np.float32:
+        img = img.astype(np.float32)
+
+    # Step 1: Apply logarithmic transformation to linearize the multiplicative model
+    log_img = np.log1p(img)  # log(1 + I) to avoid log(0)
+
+    # Step 2: Apply 2D FFT and shift the zero-frequency component to the center
+    dft = np.fft.fft2(log_img)
+    dft_shift = np.fft.fftshift(dft)
+
+    # Step 3: Create the homomorphic filter (high-pass with soft transition)
+    rows, cols = img.shape
+    u = np.arange(-cols // 2, cols // 2)
+    v = np.arange(-rows // 2, rows // 2)
+    U, V = np.meshgrid(u, v)
+    D2 = U**2 + V**2
+
+    H = (gammaH - gammaL) * (1 - np.exp(-D2 / (2 * sigma**2))) + gammaL
+
+    # Step 4: Apply the filter in the frequency domain
+    filtered_dft = dft_shift * H
+
+    # Step 5: Inverse FFT to return to spatial domain
+    filtered_img = np.fft.ifft2(np.fft.ifftshift(filtered_dft))
+    filtered_img = np.real(filtered_img)
+
+    # Step 6: Inverse logarithm to retrieve the final enhanced image
+    exp_img = np.expm1(filtered_img)  # equivalent to exp(x) - 1
+    exp_img = np.clip(exp_img, 0, 255)
+
+    return exp_img.astype(np.uint8)
+
+def CreateUnsharpMaskingFilter(shape, cutoff_freq, alpha=1.0, method='gaussian'):
+    """
+    Create an unsharp masking filter in the frequency domain.
+
+    Parameters:
+        shape        : tuple, (height, width) of the image
+        cutoff_freq  : float, cutoff frequency for the lowpass component
+        alpha        : float, sharpening factor (>0)
+        method       : str, type of lowpass ('gaussian', 'ideal', 'butterworth')
+
+    Returns:
+        H_unsharp    : 2D numpy array with the unsharp masking filter
+    """
+    if method == 'gaussian':
+        H_lowpass = CreateGaussianLowpassFilter(shape, cutoff_freq)
+    elif method == 'ideal':
+        H_lowpass = CreateIdealLowpassFilter(shape, cutoff_freq)
+    elif method == 'butterworth':
+        H_lowpass = CreateButterworthLowpassFilter(shape, cutoff_freq, order=2)
+    else:
+        raise ValueError("Unsupported method. Choose 'gaussian', 'ideal', or 'butterworth'.")
+
+    # Unsharp masking filter: H_unsharp(f) = 1 + alpha * (1 - H_lowpass(f))
+    H_unsharp = 1 + alpha * (1 - H_lowpass)
+    
+    return H_unsharp
+
+def CreateLaplacianOfGaussianFilter(shape, cutoff_freq):
+    """
+    Create a Laplacian of Gaussian (LoG) filter in the frequency domain.
+
+    Parameters:
+        shape        : tuple, (height, width) of the image
+        cutoff_freq  : float, frequency cutoff (f_c) that controls the Gaussian spread
+
+    Returns:
+        log_filter   : 2D numpy array with the filter in the frequency domain
+    """
+    rows, cols = shape
+    cy, cx = rows // 2, cols // 2
+
+    # Create frequency grids centered at (0,0)
+    u = np.fft.fftfreq(cols).reshape(1, -1)
+    v = np.fft.fftfreq(rows).reshape(-1, 1)
+    
+    # Shift the frequency grids so that (0,0) is at the center
+    u = np.fft.fftshift(u)
+    v = np.fft.fftshift(v)
+
+    # Compute squared frequency radius: f^2 = u^2 + v^2
+    f_squared = u**2 + v**2
+
+    # Laplacian of Gaussian filter in frequency domain
+    log_filter = -4 * (np.pi**2) * f_squared * np.exp(-f_squared / (2 * (cutoff_freq ** 2)))
+
+    return log_filter
+
+def CreateButterworthHighpassFilter(shape, cutoff_frequency, order):
+    """
+    Creates a Butterworth high-pass filter kernel in the frequency domain.
+
+    Parameters:
+        shape : tuple
+            Shape of the filter (rows, cols), typically matching the image dimensions.
+        cutoff_frequency : float
+            Cutoff frequency for the high-pass filter.
+        order : int
+            Order of the Butterworth filter, controlling the sharpness of the transition.
+
+    Returns:
+        filter_kernel : np.ndarray
+            Butterworth high-pass filter kernel as a 2D numpy array.
+    """
+    rows, cols = shape
+    crow, ccol = rows // 2, cols // 2
+    Y, X = np.ogrid[:rows, :cols]
+    distance = np.sqrt((X - ccol)**2 + (Y - crow)**2)
+    
+    # Butterworth high-pass filter formula
+    filter_kernel = 1 / (1 + (cutoff_frequency / (distance + 1e-5))**(2 * order))  # Avoid division by zero
+    return filter_kernel.astype(np.float32)
+
+def CreateGaussianHighpassFilter(shape, cutoff_frequency):
+    """
+    Creates a Gaussian high-pass filter kernel in the frequency domain.
+
+    Parameters:
+        shape : tuple
+            Shape of the filter (rows, cols), typically matching the image dimensions.
+        cutoff_frequency : float
+            Cutoff frequency for the high-pass filter.
+
+    Returns:
+        filter_kernel : np.ndarray
+            Gaussian high-pass filter kernel as a 2D numpy array.
+    """
+    rows, cols = shape
+    crow, ccol = rows // 2, cols // 2
+    Y, X = np.ogrid[:rows, :cols]
+    distance = np.sqrt((X - ccol)**2 + (Y - crow)**2)
+    
+    # Gaussian high-pass filter formula
+    lowpass_kernel = np.exp(-(distance**2) / (2 * (cutoff_frequency**2)))
+    highpass_kernel = 1 - lowpass_kernel
+    return highpass_kernel.astype(np.float32)
+
+def CreateIdealHighpassFilter(shape, cutoff_frequency):
+    """
+    Creates an ideal high-pass filter kernel in the frequency domain.
+
+    Parameters:
+        shape : tuple
+            Shape of the filter (rows, cols), typically matching the image dimensions.
+        cutoff_frequency : float
+            Cutoff frequency for the high-pass filter.
+
+    Returns:
+        filter_kernel : np.ndarray
+            Ideal high-pass filter kernel as a 2D numpy array.
+    """
+
+    rows, cols = shape
+    crow, ccol = rows // 2, cols // 2
+    Y, X = np.ogrid[:rows, :cols]
+    distance = np.sqrt((X - ccol)**2 + (Y - crow)**2)
+    
+    # Ideal high-pass filter formula
+    filter_kernel = distance > cutoff_frequency
+    return filter_kernel.astype(np.float32)
 
 def CreateLanczosLowpassFilter(shape, cutoff_frequency, a=3):
     """
@@ -1001,14 +1203,16 @@ def ConvolveSeparable(I, gh, gv):
     Applies separable convolution to the input image I using 1D kernels gh (horizontal) and gv (vertical).
 
     Parameters:
-    - I: 2D numpy array representing the input grayscale image.
-    - gh: 1D numpy array representing the horizontal convolution kernel.
-    - gv: 1D numpy array representing the vertical convolution kernel.
+        I: 2D numpy array representing the input grayscale image.
+        gh: 1D numpy array representing the horizontal convolution kernel.
+        gv: 1D numpy array representing the vertical convolution kernel.
 
     Returns:
-    - Itmp: 2D numpy array representing the image after applying both convolutions.
-            Note: The returned image is the intermediate result after vertical convolution,
-            with padding removed.
+        Itmp: 2D numpy array representing the image after applying both convolutions.
+    
+    Note: 
+    The returned image is the intermediate result after vertical convolution,
+        with padding removed.
     """
 
     height, width = I.shape
@@ -1047,12 +1251,12 @@ def ConvolveSeparableOpt(I, gh, gv):
     Optimized version using scipy.ndimage.convolve1d.
 
     Parameters:
-    - I: 2D numpy array (grayscale image).
-    - gh: 1D numpy array (horizontal kernel).
-    - gv: 1D numpy array (vertical kernel).
+        I: 2D numpy array (grayscale image).
+        gh: 1D numpy array (horizontal kernel).
+        gv: 1D numpy array (vertical kernel).
 
     Returns:
-    - Ir: 2D numpy array (result after separable convolution).
+        Ir: 2D numpy array (result after separable convolution).
     """
     # Apply horizontal convolution (axis=1 -> along columns)
     Itmp = convolve1d(I, gh, axis=1, mode='reflect')
@@ -1067,10 +1271,10 @@ def GetKernelHalfWidth(sigma):
     Computes the half-width of the Gaussian kernel based on the given standard deviation.
 
     Parameters:
-    - sigma (float): The standard deviation of the Gaussian function.
+        sigma (float): The standard deviation of the Gaussian function.
 
     Returns:
-    - half_width (int): The computed half-width of the kernel.
+        half_width (int): The computed half-width of the kernel.
     """
     return int(2.5 * sigma + 0.5)  # Ensures enough coverage of the Gaussian function
 
@@ -1079,10 +1283,10 @@ def CreateGaussianKernel(sigma):
     Generates a 1D Gaussian kernel based on a given standard deviation (sigma).
 
     Parameters:
-    - sigma (float): The standard deviation of the Gaussian function.
+        sigma (float): The standard deviation of the Gaussian function.
 
     Returns:
-    - gauss (numpy.ndarray): The normalized 1D Gaussian kernel.
+        gauss (numpy.ndarray): The normalized 1D Gaussian kernel.
     """
     # Step 1: Determine the half-width of the kernel
     half_width = GetKernelHalfWidth(sigma)
@@ -1110,11 +1314,11 @@ def ConvolveBox(f, w):
     Convolve a 1D signal f with a 1D box kernel of length w.
 
     Parameters:
-    - f: 1D signal (numpy array) with length n.
-    - w: Length of the 1D box kernel (odd number).
+        f: 1D signal (numpy array) with length n.
+        w: Length of the 1D box kernel (odd number).
 
     Returns:
-    - result: The convolution of the signal f with the box kernel.
+        result: The convolution of the signal f with the box kernel.
     """
     n = len(f)
     half_w = w // 2  # Half width of the kernel
@@ -1140,11 +1344,11 @@ def ConvolveBox1(f, w):
     Apply a 1D box kernel to the image f (convolution with a box filter).
     
     Parameters:
-    - f: The input image (numpy array).
-    - w: The width of the box filter (odd integer).
-    
+        f: The input image (numpy array).
+        w: The width of the box filter (odd integer).
+
     Returns:
-    - The convolved image.
+        The convolved image.
     """
     # Ensure the kernel is normalized
     kernel = np.ones(w) / w  # Box filter (normalized)
@@ -1168,10 +1372,10 @@ def CreateGaussianSecondDerivativeKernel(sigma):
     Generates a 1D Gaussian second derivative kernel for edge detection.
 
     Parameters:
-    - sigma (float): Standard deviation of the Gaussian function.
+        sigma (float): Standard deviation of the Gaussian function.
 
     Returns:
-    - gauss_deriv2 (numpy.ndarray): The 1D Gaussian second derivative kernel.
+        gauss_deriv2 (numpy.ndarray): The 1D Gaussian second derivative kernel.
     """
 
     # Step 1: Get the half-width of the kernel based on sigma
@@ -1202,10 +1406,10 @@ def CreateGaussianDerivativeKernel(sigma):
     Generates a 1D Gaussian derivative kernel for edge detection.
 
     Parameters:
-    - sigma (float): Standard deviation of the Gaussian function.
+    sigma (float): Standard deviation of the Gaussian function.
 
     Returns:
-    - gauss_deriv (numpy.ndarray): The 1D Gaussian derivative kernel.
+        gauss_deriv (numpy.ndarray): The 1D Gaussian derivative kernel.
     """
     # Paso 1: Obtener la mitad del ancho del kernel
     half_width = GetKernelHalfWidth(sigma)
@@ -1230,16 +1434,23 @@ def CreateGaussianDerivativeKernel(sigma):
 
 def SobelOperator(image):
     """
-    Aplica el operador de Sobel a una imagen en escala de grises.
+    Applies the Sobel operator to a grayscale image to compute image gradients.
+    Parameters:
+        image (np.ndarray): Input 2D grayscale image as a NumPy array.
     
-    Parámetros:
-    - image: Imagen de entrada (numpy array 2D en escala de grises).
-
-    Retorna:
-    - Gx: Gradiente en la dirección X.
-    - Gy: Gradiente en la dirección Y.
-    - G: Magnitud del gradiente combinando Gx y Gy.
+    Returns:
+        - Gx (np.ndarray) : Gradient in the X direction, normalized to 8-bit.
+        - Gy (np.ndarray) : Gradient in the Y direction, normalized to 8-bit.
+        - G (np.ndarray) : Gradient magnitude, normalized to 8-bit.
+        - Gphase (np.ndarray) : Gradient phase (direction), normalized to 8-bit.
+    
+    Notes:
+    ------
+        - The input image is converted to float32 for processing.
+        - Sobel kernels are normalized by 1/8.
+        - All outputs are normalized to the range [0, 255] and returned as uint8 arrays.
     """
+    
 
     #convertir a 32 bits y normalizar
     
@@ -1279,12 +1490,13 @@ def ComputeLaplacianGaussian(img, sigma_s, sigma_d):
     Compute the Laplacian of Gaussian using separable convolution.
 
     Parameters:
-    - img: Input image (grayscale, float32).
-    - sigma_s: sigma for smoothing Gaussian.
-    - sigma_d: sigma for second derivative.
+        img: Input image (grayscale, float32).
+        sigma_s: sigma for smoothing Gaussian.
+        sigma_d: sigma for second derivative.
 
     Returns:
-    - LoG: Laplacian of Gaussian image.
+        LoG: Laplacian of Gaussian image.
+
     """
     img = img.astype(np.float32)
 
@@ -1304,15 +1516,15 @@ def ComputeImageGradient(img, sigma_s, sigma_d):
     Compute the image gradient using the Gaussian derivative kernel.
 
     Parameters:
-    - img: The input image (numpy array).
-    - sigma_s: Standard deviation for the Gaussian kernel.
-    - sigma_d: Standard deviation for the Gaussian derivative kernel.
+        img: The input image (numpy array).
+        sigma_s: Standard deviation for the Gaussian kernel.
+        sigma_d: Standard deviation for the Gaussian derivative kernel.
 
     Returns:
-    - Gx: The gradient image in the X direction.
-    - Gy: The gradient image in the Y direction.
-    - Gmag: The magnitude of the gradient.
-    - Gphase: The phase of the gradient (direction).
+        - Gx : The gradient image in the X direction.
+        - Gy : The gradient image in the Y direction.
+        - Gmag : The magnitude of the gradient.
+        - Gphase : The phase of the gradient (direction).
     """
     # convertir a 32 bits y normalizar
     
@@ -1351,13 +1563,13 @@ def AddPeriodicNoise(img, amplitude=30, frequency=0.05, angle=0):
     Adds periodic (sinusoidal) noise to a grayscale or color image.
 
     Parameters:
-    - img: Input image (numpy array, uint8, grayscale or color).
-    - amplitude: Amplitude of the sinusoidal noise.
-    - frequency: Frequency of the sinusoidal pattern (cycles per pixel).
-    - angle: Angle of the sinusoidal pattern in degrees.
+        img: Input image (numpy array, uint8, grayscale or color).
+        amplitude: Amplitude of the sinusoidal noise.
+        frequency: Frequency of the sinusoidal pattern (cycles per pixel).
+        angle: Angle of the sinusoidal pattern in degrees.
 
     Returns:
-    - Image with periodic noise.
+        Image with periodic noise.
     """
 
     # Prepare grid
@@ -1381,11 +1593,11 @@ def AddGaussianNoise(img, sigma):
     Adds independent Gaussian noise to a grayscale image.
 
     Parameters:
-    - img: Input grayscale image (numpy array).
-    - sigma: Standard deviation of the Gaussian noise.
+        img: Input grayscale image (numpy array).
+        sigma: Standard deviation of the Gaussian noise.
 
     Returns:
-    - Image with added noise.
+        Image with added noise.
     """
     # Generate Gaussian noise with mean 0 and standard deviation sigma
     noise = np.random.normal(0, sigma, img.shape).astype(np.float32)
@@ -1403,12 +1615,12 @@ def AddSaltAndPepperNoise(img, salt_prob, pepper_prob):
     Adds salt and pepper noise to a grayscale image.
     
     Parameters:
-    - img: Input grayscale image (numpy array).
-    - salt_prob: Probability of adding salt noise (white pixels).
-    - pepper_prob: Probability of adding pepper noise (black pixels).
+        img: Input grayscale image (numpy array).
+        salt_prob: Probability of adding salt noise (white pixels).
+        pepper_prob: Probability of adding pepper noise (black pixels).
     
     Returns:
-    - Noisy image with salt and pepper noise added.
+        Noisy image with salt and pepper noise added.
     """
     noisy_img = img.copy()
     num_salt = np.ceil(salt_prob * img.size)
@@ -1429,10 +1641,10 @@ def AddPoissonNoise(img):
     Adds Poisson noise to a grayscale image.
     
     Parameters:
-    - img: Input grayscale image (numpy array).
+        img: Input grayscale image (numpy array).
     
     Returns:
-    - Noisy image with Poisson noise added.
+        Noisy image with Poisson noise added.
     """
 
     noisy_img = np.random.poisson(img).astype(np.uint8)
@@ -1444,12 +1656,12 @@ def AddUniformNoise(img, low, high):
     Adds uniform noise to a grayscale image.
     
     Parameters:
-    - img: Input grayscale image (numpy array).
-    - low: Lower bound of the uniform distribution.
-    - high: Upper bound of the uniform distribution.
-    
+        img: Input grayscale image (numpy array).
+        low: Lower bound of the uniform distribution.
+        high: Upper bound of the uniform distribution.
+
     Returns:
-    - Noisy image with uniform noise added.
+        Noisy image with uniform noise added.
     """
     noise = np.random.uniform(low, high, img.shape).astype(np.float32)
     noisy_img = img.astype(np.float32) + noise
@@ -1461,11 +1673,11 @@ def AddSpeckleNoise(img, sigma):
     Adds speckle noise to a grayscale image.
     
     Parameters:
-    - img: Input grayscale image (numpy array).
-    - sigma: Standard deviation of the Gaussian noise.
+        img: Input grayscale image (numpy array).
+        sigma: Standard deviation of the Gaussian noise.
     
     Returns:
-    - Noisy image with speckle noise added.
+        Noisy image with speckle noise added.
     """
     noise = np.random.normal(0, sigma, img.shape).astype(np.float32)
     noisy_img = img.astype(np.float32) + img.astype(np.float32) * noise
@@ -1477,6 +1689,77 @@ def AddSpeckleNoise(img, sigma):
 #    Filter functions              #
 #                                   #
 # ---------------------------------
+
+def ApplyFrequencyDomainFilterLabL(image_bgr: np.ndarray, kernel: np.ndarray) -> np.ndarray:
+    """
+    Applies a frequency domain filter to the L channel (luminance) of a color image in the CIELAB space.
+
+    Parameters:
+        image_bgr : np.ndarray
+            Input color image (H x W x 3), BGR format, dtype=uint8.
+        
+        kernel : np.ndarray
+            2D frequency domain filter (same size as image), should be real-valued and non-negative.
+
+    Returns:
+        np.ndarray:
+            Filtered color image in BGR (uint8), with the luminance channel processed in the frequency domain.
+    """
+    if image_bgr.ndim != 3 or image_bgr.shape[2] != 3:
+        raise ValueError("Input image must be a BGR image with 3 channels.")
+
+    # Convert image to CIELAB
+    lab_img = cv.cvtColor(image_bgr, cv.COLOR_BGR2LAB)
+    l, a, b = cv.split(lab_img)
+
+    # Convert to float32
+    l_float = l.astype(np.float32)
+
+    # Forward FFT
+    dft = np.fft.fft2(l_float)
+    dft_shifted = np.fft.fftshift(dft)
+
+    # Apply kernel
+    filtered_dft = dft_shifted * kernel
+
+    # Inverse FFT
+    idft = np.fft.ifft2(np.fft.ifftshift(filtered_dft))
+    l_filtered = np.real(idft)
+
+    # Clip and convert to uint8
+    l_filtered = np.clip(l_filtered, 0, 255).astype(np.uint8)
+
+    # Merge LAB and convert back to BGR
+    filtered_lab = cv.merge([l_filtered, a, b])
+    bgr_result = cv.cvtColor(filtered_lab, cv.COLOR_LAB2BGR)
+
+    return bgr_result
+
+def ApplyFrequencyDomainFilterBGR(image_bgr, kernel):
+    """
+    Applies a frequency domain filter to each BGR channel of a color image independently.
+
+    Parameters:
+        image_bgr : np.ndarray
+            Input color image (H x W x 3) in uint8 format.
+        
+        kernel : np.ndarray
+            Frequency domain filter (2D array) of shape (H, W).
+
+    Returns:
+        np.ndarray:
+            Filtered BGR image (uint8), same size as input.
+    """
+    if image_bgr.ndim != 3 or image_bgr.shape[2] != 3:
+        raise ValueError("Input image must be BGR (H x W x 3).")
+
+    filtered_channels = []
+    for c in range(3):
+        channel = image_bgr[:, :, c]
+        filtered = ApplyFrequencyDomainFilter(channel, kernel)
+        filtered_channels.append(filtered)
+
+    return cv.merge(filtered_channels)
 
 def ApplyFrequencyDomainFilter(image, kernel):
     """
@@ -1518,21 +1801,160 @@ def ApplyFrequencyDomainFilter(image, kernel):
 
     return filtered_image
 
+def HomomorphicFilter(img: np.ndarray, gammaL=0.5, gammaH=1.5, sigma=30):
+    """
+    Applies homomorphic filtering to a grayscale image in the frequency domain.
 
+    This method assumes that the image can be modeled as a product of illumination and reflectance:
+        E(x, y) = L(x, y) * R(x, y)
+    By applying a logarithm and Fourier transform, it separates these components and enhances reflectance
+    (details) while suppressing illumination variations (shadows, lighting gradients).
+
+    Parameters:
+        img (np.ndarray): Input 2D grayscale image (pixel values in range 0–255).
+        gammaL (float): Gain for low frequencies (illumination component). Should be < 1.
+        gammaH (float): Gain for high frequencies (reflectance component). Should be > 1.
+        sigma (float): Standard deviation of the Gaussian that controls the transition region.
+
+    Returns:
+        np.ndarray: Output image after homomorphic filtering (same shape as input, dtype uint8).
+    """
+
+    # Ensure image is in float32 for accurate processing
+    if img.dtype != np.float32:
+        img = img.astype(np.float32)
+
+    # Step 1: Apply logarithmic transformation to linearize the multiplicative model
+    log_img = np.log1p(img)  # log(1 + I) to avoid log(0)
+
+    # Step 2: Apply 2D FFT and shift the zero-frequency component to the center
+    dft = np.fft.fft2(log_img)
+    dft_shift = np.fft.fftshift(dft)
+
+    # Step 3: Create the homomorphic filter (high-pass with soft transition)
+    rows, cols = img.shape
+    u = np.arange(-cols // 2, cols // 2)
+    v = np.arange(-rows // 2, rows // 2)
+    U, V = np.meshgrid(u, v)
+    D2 = U**2 + V**2
+
+    H = (gammaH - gammaL) * (1 - np.exp(-D2 / (2 * sigma**2))) + gammaL
+
+    # Step 4: Apply the filter in the frequency domain
+    filtered_dft = dft_shift * H
+
+    # Step 5: Inverse FFT to return to spatial domain
+    filtered_img = np.fft.ifft2(np.fft.ifftshift(filtered_dft))
+    filtered_img = np.real(filtered_img)
+
+    # Step 6: Inverse logarithm to retrieve the final enhanced image
+    exp_img = np.expm1(filtered_img)  # equivalent to exp(x) - 1
+    exp_img = np.clip(exp_img, 0, 255)
+
+    return exp_img.astype(np.uint8)
+
+def HomomorphicFilterLab(bgr_img: np.ndarray, gammaL=0.5, gammaH=1.5, sigma=30) -> np.ndarray:
+    """
+    Applies homomorphic filtering to the L (lightness) channel of a BGR image using the CIELAB color space.
+
+    Parameters:
+        bgr_img : np.ndarray
+            Input image in BGR format (as used by OpenCV), with dtype uint8 and shape (H, W, 3).
+        gammaL : float
+            Gain for low frequencies (<1, suppresses illumination).
+        gammaH : float
+            Gain for high frequencies (>1, enhances details).
+        sigma : float
+            Controls the transition between low and high frequencies.
+
+    Returns:
+        np.ndarray:
+            BGR image after homomorphic filtering on the luminance channel (dtype uint8, same shape as input).
+    """
+
+    # Convert to LAB color space
+    lab = cv.cvtColor(bgr_img, cv.COLOR_BGR2LAB)
+    l, a, b = cv.split(lab)
+
+    # Convert L to float32 and scale to [0, 255] if necessary (OpenCV stores L in [0, 255] already)
+    l_float = l.astype(np.float32)
+
+    # Step 1: Log-transform
+    log_l = np.log1p(l_float)
+
+    # Step 2: DFT (centered)
+    dft = np.fft.fft2(log_l)
+    dft_shift = np.fft.fftshift(dft)
+
+    # Step 3: Homomorphic filter in frequency domain
+    rows, cols = l.shape
+    u = np.arange(-cols//2, cols//2)
+    v = np.arange(-rows//2, rows//2)
+    U, V = np.meshgrid(u, v)
+    D2 = U**2 + V**2
+    H = (gammaH - gammaL) * (1 - np.exp(-D2 / (2 * sigma**2))) + gammaL
+
+    # Step 4: Apply filter
+    filtered_dft = dft_shift * H
+
+    # Step 5: Inverse DFT
+    inv_dft = np.fft.ifft2(np.fft.ifftshift(filtered_dft))
+    inv_dft = np.real(inv_dft)
+
+    # Step 6: Inverse log
+    l_filtered = np.expm1(inv_dft)
+
+    # Normalize and clip to [0, 255]
+    l_filtered = np.clip(l_filtered, 0, 255).astype(np.uint8)
+
+    # Merge back and convert to BGR
+    lab_filtered = cv.merge([l_filtered, a, b])
+    bgr_result = cv.cvtColor(lab_filtered, cv.COLOR_LAB2BGR)
+
+    return bgr_result
+
+def HomomorphicFilterBGR(img_bgr: np.ndarray, gammaL=0.5, gammaH=1.5, sigma=30):
+    """
+    Applies homomorphic filtering to each channel of an BGR image independently.
+
+    This method enhances reflectance details and suppresses illumination variations
+    by working in the log-frequency domain. It applies the homomorphic filter to each
+    BGR channel separately.
+
+    Parameters:
+        img_bgr (np.ndarray): Input BGR image of shape (H, W, 3), dtype uint8.
+        gammaL (float): Gain for low frequencies (illumination), should be < 1.
+        gammaH (float): Gain for high frequencies (reflectance), should be > 1.
+        sigma (float): Standard deviation of the Gaussian transition in frequency domain.
+
+    Returns:
+        np.ndarray: Homomorphically filtered BGR image, same shape as input, dtype uint8.
+    """
+    if img_bgr.ndim != 3 or img_bgr.shape[2] != 3:
+        raise ValueError("Input must be an BGR image with 3 channels.")
+
+    channels = cv.split(img_bgr)
+    filtered_channels = []
+
+    for ch in channels:
+        filtered = HomomorphicFilter(ch, gammaL, gammaH, sigma)
+        filtered_channels.append(filtered)
+
+    return cv.merge(filtered_channels)
 
 def MeanShiftFilter(I, hs, hr, max_iter=10, epsilon=1e-3):
     """
     Optimized Mean Shift filter for grayscale images (edge-preserving smoothing).
 
     Parameters:
-    - I: Input grayscale image (numpy array, uint8 or float32).
-    - hs: Spatial bandwidth (controls spatial window size).
-    - hr: Range bandwidth (controls intensity similarity).
-    - max_iter: Maximum number of iterations per pixel.
-    - epsilon: Convergence threshold for the mean-shift vector.
+        I: Input grayscale image (numpy array, uint8 or float32).
+        hs: Spatial bandwidth (controls spatial window size).
+        hr: Range bandwidth (controls intensity similarity).
+        max_iter: Maximum number of iterations per pixel.
+        epsilon: Convergence threshold for the mean-shift vector.
 
     Returns:
-    - Ir: Output image after mean-shift filtering (same shape as I).
+        Ir: Output image after mean-shift filtering (same shape as I).
     """
     I = I.astype(np.float32)
     height, width = I.shape
@@ -1583,11 +2005,11 @@ def MedianFilterGrayscale(image, window_size):
     Applies a median filter to a grayscale image using efficient NumPy operations.
 
     Parameters:
-    - image: Grayscale image (numpy array).
-    - window_size: Size of the square window to compute the median (must be odd).
+        image: Grayscale image (numpy array).
+        window_size: Size of the square window to compute the median (must be odd).
 
     Returns:
-    - Filtered image with the median filter applied.
+        Filtered image with the median filter applied.
     """
     if window_size % 2 == 0:
         raise ValueError("Window size must be odd.")
@@ -1611,11 +2033,11 @@ def MedianFilterBGR(image, window_size):
     Applies a median filter to a BGR color image using efficient NumPy operations.
 
     Parameters:
-    - image: BGR color image (numpy array, shape HxWx3).
-    - window_size: Size of the square window to compute the median (must be odd).
+        image: BGR color image (numpy array, shape HxWx3).
+        window_size: Size of the square window to compute the median (must be odd).
 
     Returns:
-    - Filtered image with the median filter applied to each channel.
+        Filtered image with the median filter applied to each channel.
     """
     if window_size % 2 == 0:
         raise ValueError("Window size must be odd.")
@@ -1792,14 +2214,14 @@ def NonLocalMeans(I, window_size, search_size, sigma):
     """
     Aplica el filtro de medios no locales (Non-Local Means) a una imagen en escala de grises.
 
-    Parámetros:
-    - I: Imagen en escala de grises (numpy array).
-    - window_size: Tamaño del parche (debe ser impar).
-    - search_size: Tamaño de la región de búsqueda (debe ser impar).
-    - sigma: Parámetro de suavizado.
+    Parameters:
+        I: Imagen en escala de grises (numpy array).
+        window_size: Tamaño del parche (debe ser impar).
+        search_size: Tamaño de la región de búsqueda (debe ser impar).
+        sigma: Parámetro de suavizado.
 
-    Retorna:
-    - Ir: Imagen suavizada.
+    Returns:
+        Ir: Imagen suavizada.
     """
     I = I.astype(np.float32) / 255.0  # Normalizar la imagen
     height, width = I.shape
@@ -1844,14 +2266,14 @@ def BilateralFilter(I, ss, sr, niter):
     """
     Aplica un filtro bilateral iterativo a una imagen en escala de grises.
 
-    Parámetros:
-    - I: Imagen en escala de grises (numpy array).
-    - ss: Desviación estándar del kernel espacial.
-    - sr: Desviación estándar del kernel de rango.
-    - niter: Número de iteraciones.
+    Parameters:
+        I: Imagen en escala de grises (numpy array).
+        ss: Desviación estándar del kernel espacial.
+        sr: Desviación estándar del kernel de rango.
+        niter: Número de iteraciones.
 
-    Retorna:
-    - Imagen filtrada con el filtro bilateral.
+    Returns:
+        Imagen filtrada con el filtro bilateral.
     """
     I = I.astype(np.float32) / 255.0  # Normalizar la imagen a rango [0,1]
     height, width = I.shape
@@ -1886,22 +2308,20 @@ def BilateralFilterGrayscale(I, ss, sr, n_iter=1, n=3):
     Applies a fast bilateral filter to a grayscale image using raised cosine approximation.
 
     Parameters:
-    ----------
-    I : np.ndarray
-        Input grayscale image (uint8 or float32), values in range [0, 255] or [0.0, 1.0].
-    ss : float
-        Spatial standard deviation (sigma_s) of the Gaussian kernel.
-    sr : float
-        Range standard deviation (sigma_r) for intensity differences.
-    n_iter : int, optional
-        Number of iterations to apply the filter (default is 1).
-    n : int, optional
-        Degree of the raised cosine approximation (default is 3).
+        I : np.ndarray
+            Input grayscale image (uint8 or float32), values in range [0, 255] or [0.0, 1.0].
+        ss : float
+            Spatial standard deviation (sigma_s) of the Gaussian kernel.
+        sr : float
+            Range standard deviation (sigma_r) for intensity differences.
+        n_iter : int, optional
+            Number of iterations to apply the filter (default is 1).
+        n : int, optional
+            Degree of the raised cosine approximation (default is 3).
 
     Returns:
-    -------
-    np.ndarray
-        Filtered grayscale image in uint8 format, values in range [0, 255].
+        np.ndarray
+            Filtered grayscale image in uint8 format, values in range [0, 255].
     """
     I = I.astype(np.float32) / 255.0  # Normalize input image to [0,1]
     g = 1.0 / sr  # Inverse of range standard deviation
@@ -1950,14 +2370,14 @@ def BilateralFilterBGR(I_bgr, ss, sr, niter=1, n=3):
     Applies the fast bilateral filter to a BGR color image using elevated cosine approximation.
     
     Parameters:
-    - I_bgr: Input image in BGR format (numpy array of shape HxWx3, dtype=uint8).
-    - ss: Spatial standard deviation (sigma for spatial Gaussian).
-    - sr: Range standard deviation (sigma for intensity Gaussian).
-    - niter: Number of iterations (default: 1).
-    - n: Approximation parameter; higher values approximate the Gaussian more closely (recommended: 3-5).
-    
+        I_bgr: Input image in BGR format (numpy array of shape HxWx3, dtype=uint8).
+        ss: Spatial standard deviation (sigma for spatial Gaussian).
+        sr: Range standard deviation (sigma for intensity Gaussian).
+        niter: Number of iterations (default: 1).
+        n: Approximation parameter; higher values approximate the Gaussian more closely (recommended: 3-5).
+
     Returns:
-    - Filtered image in BGR format (numpy array of dtype=uint8).
+        Filtered image in BGR format (numpy array of dtype=uint8).
     """
     # Normalize the input to [0,1]
     I_bgr = I_bgr.astype(np.float32) / 255.0
@@ -1999,11 +2419,11 @@ def GaussianFilterGrayscale(img, sigma):
     Applies a Gaussian filter to a grayscale image.
 
     Parameters:
-    - img: Grayscale image (numpy array).
-    - sigma: Standard deviation of the Gaussian filter.
+        img: Grayscale image (numpy array).
+        sigma: Standard deviation of the Gaussian filter.
 
     Returns:
-    - Filtered image with the Gaussian filter applied.
+        Filtered image with the Gaussian filter applied.
     """
     img = img.astype(np.float32) / 255.0  # Normalize the image
 
@@ -2017,11 +2437,11 @@ def GaussianFilterBGR(img, sigma):
     Applies a Gaussian filter to an BGR image.
 
     Parameters:
-    - img: BGR image (numpy array).
-    - sigma: Standard deviation of the Gaussian filter.
+        img: BGR image (numpy array).
+        sigma: Standard deviation of the Gaussian filter.
 
     Returns:
-    - Filtered image with the Gaussian filter applied.
+        Filtered image with the Gaussian filter applied.
     """
     # Verify that the image is RGB
     if len(img.shape) != 3 or img.shape[2] != 3:
@@ -2047,15 +2467,15 @@ def AnisotropicDiffusion(img, num_iter=15, k=15, lamb=0.25, option=1):
     """
     Realiza difusión anisotrópica (Perona-Malik) en una imagen en escala de grises.
 
-    Parámetros:
-    - img: imagen de entrada (2D numpy array, escala de grises).
-    - num_iter: número de iteraciones.
-    - k: parámetro de sensibilidad a los bordes.
-    - lambda_val: coeficiente de difusión (0 < lambda <= 0.25).
-    - option: tipo de función conductiva (1 = exponencial, 2 = racional).
+    Parameters:
+        img: imagen de entrada (2D numpy array, escala de grises).
+        num_iter: número de iteraciones.
+        k: parámetro de sensibilidad a los bordes.
+        lambda_val: coeficiente de difusión (0 < lambda <= 0.25).
+        option: tipo de función conductiva (1 = exponencial, 2 = racional).
 
-    Devuelve:
-    - Imagen suavizada.
+    Returns:
+        Imagen suavizada.
     """
     img = img.astype(np.float32)
     for _ in range(num_iter):
@@ -2217,6 +2637,7 @@ def FourierTransform2D(image):
     Returns:
         2D Fourier Transform of the image.
     """
+
     # First, apply FFT along the rows (axis=1)
     fft_rows = np.fft.fft(image, axis=1)
     
@@ -2245,6 +2666,7 @@ def SlowFourier2D(image):
         2D numpy array of complex numbers: The frequency-domain representation of the image.
 
     Notes:
+    -----
         - This is a very slow implementation with time complexity O(N^4).
         - Intended for educational purposes only. For practical use, prefer numpy.fft.fft2().
     """
@@ -2346,7 +2768,6 @@ def ComputeFourierSpectra(image):
 
     return magnitude, phase
 
-
 # --------------------------------- #
 #                                   #
 #   Edge detection functions        #
@@ -2363,6 +2784,7 @@ def GaussianPyramid(image, levels=5, factor=2):
     Returns:
         list of np.ndarray: List containing the images at each level of the pyramid, starting with the original image.
     Notes:
+    -----
         - Requires `lip.ConvolveSeparableOpt` for Gaussian smoothing and `zoom` for downsampling.
         - `gaussian_kernel_1d` must be defined and provided for the convolution.
     """
