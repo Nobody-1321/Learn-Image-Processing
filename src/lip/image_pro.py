@@ -1,12 +1,12 @@
 import cv2 as cv
 import numpy as np
 from scipy.ndimage import gaussian_filter
-from scipy.special import factorial 
 from collections import deque
 from scipy.ndimage import convolve1d, zoom, sobel
 from scipy.special import comb
 from numba import njit
-
+from scipy.fftpack import fft2, ifft2, fftshift, ifftshift
+from sklearn.linear_model import HuberRegressor
 
 def channels_bgr(img):
     """
@@ -1558,6 +1558,54 @@ def ComputeImageGradient(img, sigma_s, sigma_d):
 #                                   #
 # ---------------------------------
 
+def AddCheckerboardNoise(image, amplitude=0.2, frequency=0.1):
+    """
+    Adds periodic checkerboard noise to an image and returns it normalized as a float32 array.
+
+    Parameters:
+    ----------
+    image : np.ndarray
+        Input image, either in uint8 format (0-255) or float32 format (0.0-1.0).
+    amplitude : float, optional
+        Amplitude of the noise. For float32 images, it should be in the range [0, 1].
+        For uint8 images, it should be in the range [0, 255]. Default is 0.2.
+    frequency : float, optional
+        Spatial frequency of the noise in cycles per pixel. Default is 0.1.
+    
+
+    Returns:
+    -------
+    noisy_img : np.ndarray
+        Image with added checkerboard noise, normalized to the range [0, 1] as a float32 array.
+
+    Notes:
+    -----
+    - The function converts the input image to float32 if it is in uint8 format.
+    - The noise is generated as a checkerboard pattern using the sine function.
+    - The resulting image is clipped to ensure all pixel values remain in the range [0, 1].
+    """
+    
+    # Convert to float32 and normalize if the input is uint8
+    if image.dtype == np.uint8:
+        img_float = image.astype(np.float32) / 255.0
+    else:
+        img_float = image.copy()
+    
+    rows, cols = img_float.shape[:2]
+    
+    # Create a grid of coordinates
+    x = np.arange(cols)
+    y = np.arange(rows)
+    x, y = np.meshgrid(x, y)
+            
+    # Generate checkerboard noise
+    noise = amplitude * np.sign(np.sin(2 * np.pi * frequency * x) * np.sin(2 * np.pi * frequency * y))
+    
+    # Add noise and clip to [0, 1]
+    noisy_img = np.clip(img_float + noise, 0, 1)
+
+    return noisy_img.astype(np.uint8)
+
 def AddPeriodicNoise(img, amplitude=30, frequency=0.05, angle=0):
     """
     Adds periodic (sinusoidal) noise to a grayscale or color image.
@@ -1684,11 +1732,224 @@ def AddSpeckleNoise(img, sigma):
     noisy_img = np.clip(noisy_img, 0, 255).astype(np.uint8)
     return noisy_img
 
-# --------------------------------- 
+# --------------------------------- #
 #                                   #
-#    Filter functions              #
+#    Filter functions               #
 #                                   #
-# ---------------------------------
+# --------------------------------- #
+
+def RemoveQuasiperiodicNoise(image, patch_size=128, threshold=3.0, fmax=0.61):
+    """
+    Removes quasiperiodic noise from images using adaptive notch filtering.
+    Based on the method by Sur & Grédiac (2015) with practical adjustments.
+
+    Parameters:
+        image (np.ndarray): Input image in grayscale or color (BGR).
+        patch_size (int): Size of the square patch for spectral analysis.
+        threshold (float): Standard deviation factor for detecting noise peaks.
+        fmax (float): Maximum frequency for noise detection.
+
+    Returns:
+        denoised_image (uint8): Filtered image (values in range 0-255).
+        noise_component (uint8): Extracted noise component (values in range 0-255).
+    """
+    # Convert to grayscale and normalize to [0, 1]
+    if image.ndim == 3:
+        image = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
+    image = image.astype(np.float32) / 255.0
+    height, width = image.shape
+
+    # Adjust parameters according to image dimensions
+    patch_size = min(patch_size, height, width)
+    step = max(1, patch_size // 8)  # Overlap L/8
+    f2 = 8 / patch_size             # Minimum frequency
+
+    # Precompute Hann window
+    hann_window = np.outer(np.hanning(patch_size), np.hanning(patch_size))
+
+    # Extract patches and compute power spectra
+    patches = [
+        image[y:y+patch_size, x:x+patch_size] * hann_window
+        for y in range(0, height - patch_size, step)
+        for x in range(0, width - patch_size, step)
+    ]
+    power_spectra = np.array([np.abs(fftshift(fft2(p)))**2 for p in patches])
+
+    # Average power spectrum (geometric mean)
+    avg_power_spectrum = np.exp(np.mean(np.log(power_spectra + 1e-10), axis=0))
+
+    # Radial frequencies
+    fy = np.fft.fftfreq(patch_size)[:, np.newaxis]
+    fx = np.fft.fftfreq(patch_size)
+    f = np.sqrt(fx**2 + fy**2)
+    valid_mask = (f > f2 / 4) & (f < fmax)
+
+    # Robust fit of the power law
+    log_f = np.log(f[valid_mask]).reshape(-1, 1)
+    log_P = np.log(avg_power_spectrum[valid_mask]).ravel()
+    model = HuberRegressor().fit(log_f, log_P)
+
+    log_P_pred = model.predict(log_f)
+    residuals = log_P - log_P_pred
+    std_res = np.std(residuals)
+    upper_bound = log_P_pred + threshold * std_res
+
+    # Noise peak detection
+    outliers = (log_P > upper_bound) & (f[valid_mask].ravel() >= f2)
+
+    # Outlier map with symmetry
+    outlier_mask = np.zeros_like(avg_power_spectrum, dtype=bool)
+    outlier_mask[valid_mask] = outliers
+    outlier_mask |= np.flip(outlier_mask, axis=0)
+    outlier_mask |= np.flip(outlier_mask, axis=1)
+
+    # Resize and smooth the mask
+    outlier_map = cv.resize(outlier_mask.astype(np.float32), (width, height), interpolation=cv.INTER_LINEAR)
+    outlier_map = gaussian_filter(outlier_map, sigma=2.0)
+
+    # Protect the DC component
+    cy, cx = height // 2, width // 2
+    outlier_map[cy-1:cy+2, cx-1:cx+2] = 0.0
+
+    # Notch filtering
+    fft_image = fftshift(fft2(image))
+    fft_filtered = fft_image * (1 - outlier_map)
+    denoised_image = np.real(ifft2(ifftshift(fft_filtered)))
+    noise_component = image - denoised_image
+
+    # Normalize and convert to uint8
+    denoised_image = np.clip(denoised_image * 255, 0, 255).astype(np.uint8)
+    noise_component = ((noise_component - noise_component.min()) / 
+                       (noise_component.max() - noise_component.min()) * 255).astype(np.uint8)
+
+    return denoised_image, noise_component
+
+def RemoveQuasiperiodicNoiseBGR(img, patch_size=200, threshold=3.0, fmax=0.58):
+    """
+    Applies quasiperiodic noise removal to each channel of a BGR image.
+
+    Parameters:
+        img (np.ndarray): Input image in BGR format.
+        patch_size (int): Size of the patch for spectral analysis.
+        threshold (float): Standard deviation factor for detecting noise peaks.
+        fmax (float): Maximum frequency for noise filtering.
+
+    Returns:
+        denoised (np.ndarray): Denoised image in BGR format.
+        noise (np.ndarray): Extracted noise component in BGR format.
+    """
+    # Initialize arrays for the denoised image and noise component
+    denoised = np.zeros_like(img, dtype=np.float32)
+    noise = np.zeros_like(img, dtype=np.float32)
+    
+    # Apply noise removal to each channel separately
+    for i in range(img.shape[2]):
+        denoised[:, :, i], noise[:, :, i] = RemoveQuasiperiodicNoise(
+            img[:, :, i], patch_size=patch_size, threshold=threshold, fmax=fmax
+        )
+    
+    # Clip values to the valid range and convert to uint8
+    denoised = np.clip(denoised, 0, 255).astype(np.uint8)
+    noise = np.clip(noise, 0, 255).astype(np.uint8)
+    
+    return denoised, noise
+
+def ButterworthNotchFilter(shape, d0, u_k, v_k, n=2):
+    """
+    Creates a Butterworth notch filter of a specified order and radius, centered at a given frequency 
+    (u_k, v_k) and its symmetric counterpart in the frequency domain.
+
+    Parameters:
+        shape : tuple
+            The shape of the filter (rows, cols), typically matching the size of the input image.
+        d0 : float
+            The cutoff radius of the notch filter. Frequencies within this radius will be attenuated.
+        u_k : int
+            The horizontal coordinate of the center of the notch in the frequency domain.
+        v_k : int
+            The vertical coordinate of the center of the notch in the frequency domain.
+        n : int, optional
+            The order of the Butterworth filter. Higher values result in a sharper transition. Default is 2.
+
+    Returns:
+        H : np.ndarray
+            The Butterworth notch filter as a 2D array with the same shape as the input image.
+
+    Notes:
+    -----
+    - The filter is symmetric, meaning it also applies to the frequency at (-u_k, -v_k).
+    - A small epsilon value is added to the distance calculations to avoid division by zero.
+    """
+
+    rows, cols = shape
+    u = np.arange(0, rows)
+    v = np.arange(0, cols)
+    U, V = np.meshgrid(u - rows // 2, v - cols // 2, indexing='ij')
+    
+    # Compute distances and add epsilon to avoid division by zero
+    epsilon = 1e-5
+    Dk = np.sqrt((U - u_k)**2 + (V - v_k)**2) + epsilon
+    Dk_ = np.sqrt((U + u_k)**2 + (V + v_k)**2) + epsilon
+    
+    # Butterworth notch filter formula
+    H = 1 / (1 + (d0 / Dk)**(2 * n)) * 1 / (1 + (d0 / Dk_)**(2 * n))
+    return H
+
+def NotchFiltering(img, d0, notch_coords, n=2):
+    """
+    Applies a Butterworth notch filter to an image at specified frequency coordinates.
+
+    Parameters:
+        img : np.ndarray
+            Input grayscale image to be filtered.
+        d0 : float
+            The cutoff radius of the notch filter. Frequencies within this radius will be attenuated.
+        notch_coords : list of tuples
+            A list of (u_k, v_k) coordinates in the frequency domain where periodic noise is present.
+        n : int, optional
+            The order of the Butterworth filter. Higher values result in a sharper transition. Default is 2.
+
+    Returns:
+        img_filtered : np.ndarray
+            The filtered image in the spatial domain.
+        magnitude_spectrum : np.ndarray
+            The magnitude spectrum of the original image in the frequency domain.
+        H_total : np.ndarray
+            The combined notch filter applied in the frequency domain.
+
+    Notes:
+    -----
+    - The function computes the Fourier Transform of the input image, applies the notch filter, 
+      and then performs the inverse Fourier Transform to return the filtered image.
+    - The filter is applied at all specified coordinates in [notch_coords] and their symmetric counterparts.
+    """
+    f = np.fft.fft2(img)
+    fshift = np.fft.fftshift(f)
+    
+    magnitude_spectrum = 20 * np.log(np.abs(fshift) + 1)
+    
+    # Construct combined filter
+    H_total = np.ones_like(img, dtype=np.float32)
+    for u_k, v_k in notch_coords:
+        H = ButterworthNotchFilter(img.shape, d0, u_k, v_k, n)
+        H_total *= H
+
+    # Apply the notch filter
+    filtered_spectrum = fshift * H_total
+    f_ishift = np.fft.ifftshift(filtered_spectrum)
+    img_filtered = np.fft.ifft2(f_ishift)
+    img_filtered = np.abs(img_filtered)
+
+    # Normalize the filtered image to the range [0, 255]
+    img_filtered = cv.normalize(img_filtered, None, 0, 255, cv.NORM_MINMAX)
+    img_filtered = np.uint8(img_filtered)
+    # Ensure the output is in uint8 format
+    img_filtered = np.clip(img_filtered, 0, 255).astype(np.uint8)
+    # Return the filtered image, magnitude spectrum, and the filter used
+    magnitude_spectrum = np.clip(magnitude_spectrum, 0, 255).astype(np.uint8)
+    H_total = np.clip(H_total * 255, 0, 255).astype(np.uint8)  # Scale filter for visualization
+    
+    return img_filtered, magnitude_spectrum, H_total
 
 def ApplyFrequencyDomainFilterLabL(image_bgr: np.ndarray, kernel: np.ndarray) -> np.ndarray:
     """

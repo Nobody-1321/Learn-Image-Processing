@@ -34,6 +34,8 @@ If you're interested in learning more about image processing techniques, the alg
 
 [Frequency-Domain Filtering: Fundamentals and Applications](https://medium.com/p/36a29924c4df)
 
+[Filtering of Periodic Noise in the Frequency Domain](https://medium.com/imagecraft/filtering-of-periodic-noise-in-the-frequency-domain-9b24d7b380d8)
+
 ---
 
 ## Build & Run
